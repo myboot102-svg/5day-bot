@@ -59,7 +59,28 @@ MAIN_MENU = [
 
 
 # ============================================================
-# لوحة الإدارة
+# قائمة الإيداع
+# ============================================================
+
+DEPOSIT_MENU = [
+    ["إيداع مباشر"],
+    ["إيداع عن طريق وكيل"],
+    ["رجوع للقائمة الرئيسية"],
+]
+
+
+# ============================================================
+# قائمة الإيداع المباشر
+# ============================================================
+
+DIRECT_DEPOSIT_MENU = [
+    ["رجوع للإيداع"],
+    ["رجوع للقائمة الرئيسية"],
+]
+
+
+# ============================================================
+# قائمة الإدارة
 # ============================================================
 
 ADMIN_MENU = [
@@ -112,6 +133,29 @@ async def packages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============================================================
 
 async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    await update.message.reply_text(
+        "اختر طريقة الإيداع:",
+        reply_markup=ReplyKeyboardMarkup(
+            DEPOSIT_MENU,
+            resize_keyboard=True
+        )
+    )
+
+
+# ============================================================
+# الإيداع المباشر
+# ============================================================
+
+async def direct_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    pass
+
+
+# ============================================================
+# الإيداع عن طريق وكيل
+# ============================================================
+
+async def agent_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pass
 
 
@@ -230,35 +274,71 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ============================================================
-# HANDLERS
-# ============================================================
-
-app = Application.builder().token(TOKEN).build()
-
-app.add_handler(
-    CommandHandler("start", start)
-)
-
-
-# ============================================================
-# تشغيل الأزرار الرئيسية
+# HANDLER الرئيسي للأزرار
 # ============================================================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
 
+    # ========================================================
+    # لوحة الإدارة
+    # ========================================================
+
     if text == "لوحة الإدارة":
-        await admin_panel(update, context)
+
+        if update.effective_user.id == ADMIN_ID:
+            await admin_panel(update, context)
+
+        return
+
+    # ========================================================
+    # رجوع للقائمة الرئيسية
+    # ========================================================
+
+    if text == "رجوع للقائمة الرئيسية":
+
+        keyboard = MAIN_MENU.copy()
+
+        if update.effective_user.id == ADMIN_ID:
+            keyboard.append(["لوحة الإدارة"])
+
+        await update.message.reply_text(
+            "تم الرجوع للقائمة الرئيسية.",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard,
+                resize_keyboard=True
+            )
+        )
+
+        return
+
+    # ========================================================
+    # الإيداع
+    # ========================================================
+
+    if text == "إيداع":
+        await deposit(update, context)
+
+    elif text == "إيداع مباشر":
+        await direct_deposit(update, context)
+
+    elif text == "إيداع عن طريق وكيل":
+        await agent_deposit(update, context)
+
+    elif text == "رجوع للإيداع":
+
+        await deposit(update, context)
+
+    # ========================================================
+    # أقسام المستخدم
+    # ========================================================
 
     elif text == "حسابي":
         await account(update, context)
 
     elif text == "الباقات":
         await packages(update, context)
-
-    elif text == "إيداع":
-        await deposit(update, context)
 
     elif text == "سحب":
         await withdraw(update, context)
@@ -271,6 +351,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text == "الشروط والأحكام":
         await terms(update, context)
+
+    # ========================================================
+    # أقسام الإدارة
+    # ========================================================
 
     elif text == "المستخدمون":
         await admin_users(update, context)
@@ -297,16 +381,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await admin_broadcast(update, context)
 
 
+# ============================================================
+# تشغيل البوت
+# ============================================================
+
+app = Application.builder().token(TOKEN).build()
+
+app.add_handler(
+    CommandHandler("start", start)
+)
+
 app.add_handler(
     MessageHandler(
         filters.TEXT & ~filters.COMMAND,
         button_handler
     )
 )
-
-
-# ============================================================
-# تشغيل البوت
-# ============================================================
 
 app.run_polling()
