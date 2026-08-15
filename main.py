@@ -1,4 +1,5 @@
 import os
+
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -75,7 +76,19 @@ ADMIN_MENU = [
 # ============================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass
+
+    keyboard = MAIN_MENU.copy()
+
+    if update.effective_user.id == ADMIN_ID:
+        keyboard.append(["لوحة الإدارة"])
+
+    await update.message.reply_text(
+        WELCOME,
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=True
+        )
+    )
 
 
 # ============================================================
@@ -203,7 +216,17 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============================================================
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass
+
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    await update.message.reply_text(
+        "لوحة الإدارة.",
+        reply_markup=ReplyKeyboardMarkup(
+            ADMIN_MENU,
+            resize_keyboard=True
+        )
+    )
 
 
 # ============================================================
@@ -212,9 +235,74 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 app = Application.builder().token(TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
+app.add_handler(
+    CommandHandler("start", start)
+)
 
-# هنا نضيف Handlers الخاصة بكل قسم لاحقاً.
+
+# ============================================================
+# تشغيل الأزرار الرئيسية
+# ============================================================
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    text = update.message.text
+
+    if text == "لوحة الإدارة":
+        await admin_panel(update, context)
+
+    elif text == "حسابي":
+        await account(update, context)
+
+    elif text == "الباقات":
+        await packages(update, context)
+
+    elif text == "إيداع":
+        await deposit(update, context)
+
+    elif text == "سحب":
+        await withdraw(update, context)
+
+    elif text == "الإحالة":
+        await referral(update, context)
+
+    elif text == "الدعم":
+        await support(update, context)
+
+    elif text == "الشروط والأحكام":
+        await terms(update, context)
+
+    elif text == "المستخدمون":
+        await admin_users(update, context)
+
+    elif text == "إدارة الباقات":
+        await admin_packages(update, context)
+
+    elif text == "الإيداعات":
+        await admin_deposits(update, context)
+
+    elif text == "السحوبات":
+        await admin_withdrawals(update, context)
+
+    elif text == "طرق الإيداع":
+        await admin_deposit_methods(update, context)
+
+    elif text == "طرق السحب":
+        await admin_withdraw_methods(update, context)
+
+    elif text == "الوكلاء":
+        await admin_agents(update, context)
+
+    elif text == "رسالة جماعية":
+        await admin_broadcast(update, context)
+
+
+app.add_handler(
+    MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        button_handler
+    )
+)
 
 
 # ============================================================
@@ -222,4 +310,3 @@ app.add_handler(CommandHandler("start", start))
 # ============================================================
 
 app.run_polling()
-
