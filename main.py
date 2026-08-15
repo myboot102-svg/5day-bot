@@ -8,6 +8,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.ext import ApplicationHandlerStop
 
 # ============================================================-
 # الإعدادات الأساسية
@@ -365,6 +366,8 @@ async def support_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 هل تريد إرسال الرسالة؟""",
         reply_markup=keyboard
     )
+
+    raise ApplicationHandlerStop
 
 # ============================================================
 # حالة الباقة
