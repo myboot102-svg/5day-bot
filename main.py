@@ -502,11 +502,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
 
-    if context.user_data.get("support_mode"):
-        await support_message_handler(update, context) 
-        
-    return
-
     # ========================================================
     # لوحة الإدارة
     # ========================================================
