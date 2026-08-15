@@ -308,6 +308,10 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # الدعم
 # ============================================================
 
+# ============================================================
+# الدعم
+# ============================================================
+
 async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["support_mode"] = True
@@ -317,11 +321,50 @@ async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
         الدعم الفني
 ━━━━━━━━━━━━━━━
 
-اكتب رسالتك أو أرسل صورة للمشكلة.
+اكتب رسالتك التي تريد إرسالها إلى الإدارة.
 
 ━━━━━━━━━━━━━━━"""
     )
 
+
+# ============================================================
+# استقبال رسالة الدعم
+# ============================================================
+
+async def support_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not context.user_data.get("support_mode"):
+        return
+
+    text = update.message.text
+
+    context.user_data["support_draft"] = text
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "تأكيد الإرسال",
+                callback_data="support_confirm"
+            ),
+            InlineKeyboardButton(
+                "إلغاء",
+                callback_data="support_cancel"
+            )
+        ]
+    ])
+
+    await update.message.reply_text(
+        f"""━━━━━━━━━━━━━━━
+        معاينة الرسالة
+━━━━━━━━━━━━━━━
+
+{text}
+
+━━━━━━━━━━━━━━━
+
+هل تريد إرسال الرسالة؟""",
+        reply_markup=keyboard
+    )
 
 # ============================================================
 # حالة الباقة
@@ -630,8 +673,16 @@ app.add_handler(
     MessageHandler(
         filters.TEXT & ~filters.COMMAND,
         button_handler
-    )
+    ),
+    group=1
 )
 
+app.add_handler(
+    MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        support_text_handler
+    ),
+    group=0
+)
 
 app.run_polling()
