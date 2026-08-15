@@ -1337,7 +1337,7 @@ app.add_handler(
 app.add_handler(
     MessageHandler(
         filters.TEXT & ~filters.COMMAND,
-        package_message_handler
+        message_router
     )
 )
 
