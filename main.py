@@ -142,9 +142,73 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============================================================
 # حسابي
 # ============================================================
-
 async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass
+
+    user = update.effective_user
+    user_data = context.user_data
+
+    # القيم الأساسية للمستخدم
+    balance = user_data.get("balance", 0)
+    available_balance = user_data.get("available_balance", 0)
+    frozen_amount = user_data.get("frozen_amount", 0)
+
+    total_deposits = user_data.get("total_deposits", 0)
+    total_withdrawals = user_data.get("total_withdrawals", 0)
+    total_profits = user_data.get("total_profits", 0)
+
+    package_count = user_data.get("package_count", 0)
+
+    active_package = user_data.get("active_package")
+
+    referral_count = user_data.get("referral_count", 0)
+    referral_profits = user_data.get("referral_profits", 0)
+
+    membership_days = user_data.get("membership_days", 1)
+
+    # حالة الباقة
+    if active_package:
+        package_status = "نشطة"
+        package_amount = active_package.get("amount", 0)
+        daily_profit = active_package.get("daily_profit", 0)
+        remaining_days = active_package.get("remaining_days", 0)
+    else:
+        package_status = "منتهية"
+        package_amount = 0
+        daily_profit = 0
+        remaining_days = 0
+
+    message = f"""━━━━━━━━━━━━━━━
+        حسابي
+━━━━━━━━━━━━━━━
+
+• الرصيد المتاح: {available_balance:,} د.ع.
+• المبلغ المتجمد: {frozen_amount:,} د.ع.
+• إجمالي الإيداعات: {total_deposits:,} د.ع.
+• إجمالي الأرباح: {total_profits:,} د.ع.
+• إجمالي المسحوب: {total_withdrawals:,} د.ع.
+
+━━━━━━━━━━━━━━━
+        الباقة
+━━━━━━━━━━━━━━━
+
+• الحالة: {package_status}.
+• الباقة الحالية: {package_amount:,} د.ع.
+• الربح اليومي: {daily_profit:,} د.ع.
+• الأيام المتبقية: {remaining_days}.
+• عدد الباقات: {package_count}.
+
+━━━━━━━━━━━━━━━
+        الإحالات
+━━━━━━━━━━━━━━━
+
+• عدد الإحالات: {referral_count}.
+• أرباح الإحالات: {referral_profits:,} د.ع.
+
+━━━━━━━━━━━━━━━
+• عدد أيام العضوية: {membership_days} يوم.
+━━━━━━━━━━━━━━━"""
+
+    await update.message.reply_text(message)
 
 
 # ============================================================
