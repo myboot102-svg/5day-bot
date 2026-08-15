@@ -83,27 +83,28 @@ DIRECT_DEPOSIT_MENU = [
 # ============================================================
 PACKAGES = {}
 
-# من 10,000 إلى 100,000 — كل 10,000
+# من 10,000 إلى 100,000
 for amount in range(10000, 100001, 10000):
     PACKAGES[amount] = {
         "amount": amount,
-        "daily_profit": (amount // 10000) * 500,
+        "daily_profit": (amount // 10000) * 100,
+        "total_profit": (amount // 10000) * 500,
     }
 
-
-# من 100,000 إلى 1,000,000 — كل 100,000
+# من 100,000 إلى 1,000,000
 for amount in range(100000, 1000001, 100000):
     PACKAGES[amount] = {
         "amount": amount,
-        "daily_profit": (amount // 10000) * 500,
+        "daily_profit": (amount // 10000) * 100,
+        "total_profit": (amount // 10000) * 500,
     }
 
-
-# من 1,000,000 إلى 15,000,000 — كل 500,000
+# من 1,000,000 إلى 15,000,000
 for amount in range(1000000, 15000001, 500000):
     PACKAGES[amount] = {
         "amount": amount,
-        "daily_profit": (amount // 10000) * 500,
+        "daily_profit": (amount // 10000) * 100,
+        "total_profit": (amount // 10000) * 500,
     }
 # ============================================================
 # قائمة الإدارة
@@ -179,41 +180,41 @@ async def packages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ============================================================
 # تفاصيل الباقة
-# ============================================================
-
+# ======================================================
 async def package_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
 
-    # تحويل النص إلى مبلغ
     amount_text = text.replace(" د.ع", "").replace(",", "").strip()
 
     try:
         amount = int(amount_text)
     except ValueError:
-        await update.message.reply_text(
-            "الباقة غير موجودة."
-        )
+        await update.message.reply_text("الباقة غير موجودة.")
         return
 
     package = PACKAGES.get(amount)
 
     if not package:
-        await update.message.reply_text(
-            "الباقة غير موجودة."
-        )
+        await update.message.reply_text("الباقة غير موجودة.")
         return
 
-    daily_profit = package["daily_profit"]
+    buttons = [
+        ["اشتراك"],
+        ["رجوع"]
+    ]
 
     await update.message.reply_text(
         f"""تفاصيل الباقة.
 
 المبلغ: {amount:,} د.ع.
-الربح اليومي: {daily_profit:,} د.ع.
-مدة الدورة: 5 أيام.
-
-يرجى قراءة الشروط والأحكام قبل الاشتراك."""
+الربح اليومي: {package["daily_profit"]:,} د.ع.
+إجمالي الربح خلال 5 أيام: {package["total_profit"]:,} د.ع.
+مدة الدورة: 5 أيام.""",
+        reply_markup=ReplyKeyboardMarkup(
+            buttons,
+            resize_keyboard=True
+        )
     )
 
 # ============================================================
