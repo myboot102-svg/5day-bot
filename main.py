@@ -22,7 +22,7 @@ from telegram.ext import (
 
 # ===== الإعدادات الأساسية =====
 
-TOKEN = os.getenv("TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 8460661282
 BOT_USERNAME = "FAIVEDAY5_bot"
 
