@@ -322,317 +322,272 @@ async def account(
 
 # ===== قسم الباقات =====
 
-async def packages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def packages(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    if not packages_data:
+        await update.message.reply_text(
+            "لا توجد باقات متاحة حالياً."
+        )
+        return
 
-    buttons = []
-
-    # جلب الباقات الفعالة وترتيبها حسب المبلغ
-    active_packages = []
+    keyboard = []
+    row = []
 
     for package_id, package in packages_data.items():
 
         if not package.get("active", True):
             continue
 
-        amount = int(package.get("amount", 0))
+        amount = int(package["amount"])
 
-        if amount <= 0:
-            continue
-
-        active_packages.append(
-            (package_id, package, amount)
-        )
-
-    # ترتيب من الأصغر إلى الأكبر
-    active_packages.sort(key=lambda x: x[2])
-
-    # إنشاء زر لكل باقة
-    for package_id, package, amount in active_packages:
-
-        buttons.append([
-            InlineKeyboardButton(
-                f"{amount:,} د.ع",
-                callback_data=f"package_view:{package_id}"
+        row.append(
+            KeyboardButton(
+                f"{amount:,} د.ع"
             )
-        ])
-
-    # زر الرجوع
-    buttons.append([
-        InlineKeyboardButton(
-            "رجوع للقائمة الرئيسية",
-            callback_data="main_menu"
-        )
-    ])
-
-    if not active_packages:
-
-        await update.message.reply_text(
-            "لا توجد باقات متاحة حالياً."
         )
 
-        return
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+
+    if row:
+        keyboard.append(row)
+
+    keyboard.append(
+        [KeyboardButton("رجوع للقائمة الرئيسية")]
+    )
+
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True
+    )
+
+    context.user_data["package_selection"] = True
+    context.user_data["package_confirm"] = False
 
     await update.message.reply_text(
         "الباقات المتاحة:",
-        reply_markup=InlineKeyboardMarkup(buttons)
+        reply_markup=reply_markup
     )
 
 
-# ===== تفاصيل الباقة =====
+# ===== اختيار الباقة =====
 
-async def package_view(query, package_id):
+async def package_selection(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
+    if not context.user_data.get("package_selection"):
+        return
+
+    text = update.message.text.strip()
+
+    if text == "رجوع للقائمة الرئيسية":
+
+        context.user_data["package_selection"] = False
+        context.user_data["package_confirm"] = False
+        context.user_data["selected_package"] = None
+
+        await start(update, context)
+        return
+
+    amount_text = (
+        text
+        .replace("د.ع", "")
+        .replace(",", "")
+        .strip()
+    )
+
+    if not amount_text.isdigit():
+        return
+
+    amount = int(amount_text)
+
+    package_id = str(amount)
     package = packages_data.get(package_id)
 
     if not package:
-
-        await query.answer(
-            "الباقة غير موجودة.",
-            show_alert=True
+        await update.message.reply_text(
+            "هذه الباقة غير موجودة."
         )
-
         return
 
     if not package.get("active", True):
-
-        await query.answer(
-            "هذه الباقة غير متاحة حالياً.",
-            show_alert=True
+        await update.message.reply_text(
+            "هذه الباقة غير متاحة حالياً."
         )
-
         return
 
-    amount = int(package.get("amount", 0))
-    days = int(package.get("days", PACKAGE_DAYS))
-
-    daily_profit = int(
-        package.get("daily_profit", 0)
-    )
-
-    total_profit = int(
-        package.get("total_profit", 0)
-    )
-
-    text = f"""
-تفاصيل الباقة.
-
-اسم الباقة: {amount:,} د.ع
-المبلغ: {amount:,} د.ع
-الربح اليومي: {daily_profit:,} د.ع
-إجمالي الربح: {total_profit:,} د.ع
-المدة: {days} أيام
-
-يرجى قراءة الشروط والأحكام قبل الاشتراك.
-"""
+    context.user_data["selected_package"] = package_id
+    context.user_data["package_selection"] = False
+    context.user_data["package_confirm"] = True
 
     keyboard = [
         [
-            InlineKeyboardButton(
-                "اشتراك",
-                callback_data=f"subscribe:{package_id}"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "رجوع",
-                callback_data="packages_back"
-            )
+            KeyboardButton("اشتراك"),
+            KeyboardButton("رجوع")
         ]
     ]
 
-    await query.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True
     )
 
-    await query.answer()
+    await update.message.reply_text(
+        f"""تفاصيل الباقة.
+
+المبلغ:
+{amount:,} د.ع.
+
+الربح اليومي:
+{int(package["daily_profit"]):,} د.ع.
+
+إجمالي الربح:
+{int(package["total_profit"]):,} د.ع.
+
+مدة الباقة:
+{int(package["days"])} أيام.
+
+يرجى قراءة الشروط والأحكام قبل الاشتراك.""",
+        reply_markup=reply_markup
+    )
 
 
-# ===== الاشتراك بالباقة =====
+# ===== تأكيد الاشتراك =====
 
-async def subscribe_package(query, package_id):
+async def package_confirm(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-    user_id = query.from_user.id
+    if not context.user_data.get("package_confirm"):
+        return
+
+    text = update.message.text.strip()
+
+    if text == "رجوع":
+
+        context.user_data["package_confirm"] = False
+        context.user_data["selected_package"] = None
+
+        await packages(update, context)
+        return
+
+    if text != "اشتراك":
+        return
+
+    package_id = context.user_data.get(
+        "selected_package"
+    )
 
     package = packages_data.get(package_id)
 
     if not package:
-
-        await query.answer(
-            "الباقة غير موجودة.",
-            show_alert=True
+        await update.message.reply_text(
+            "الباقة غير موجودة حالياً."
         )
-
         return
 
-    if not package.get("active", True):
-
-        await query.answer(
-            "الباقة غير متاحة حالياً.",
-            show_alert=True
-        )
-
-        return
-
+    user_id = update.effective_user.id
     user = get_user(user_id)
 
-    amount = int(package.get("amount", 0))
-    days = int(package.get("days", PACKAGE_DAYS))
+    amount = int(package["amount"])
 
-    balance = int(
-        user.get("balance", 0)
-    )
+    # التأكد من الرصيد
+    if int(user.get("balance", 0)) < amount:
 
-    # التأكد من كفاية الرصيد
-    if balance < amount:
+        await update.message.reply_text(
+            f"""رصيدك غير كافي.
 
-        await query.answer(
-            "رصيدك غير كافي.",
-            show_alert=True
+سعر الباقة:
+{amount:,} د.ع.
+
+رصيدك الحالي:
+{int(user.get("balance", 0)):,} د.ع."""
         )
 
         return
 
     # منع الاشتراك بباقة ثانية إذا عنده باقة فعالة
-    if user.get("package"):
+    if user.get("package") and user["package"].get("active"):
 
-        current_package = user["package"]
+        await update.message.reply_text(
+            "لديك باقة فعالة حالياً."
+        )
 
-        if current_package.get("active", False):
-
-            await query.answer(
-                "لديك باقة فعالة حالياً.",
-                show_alert=True
-            )
-
-            return
+        return
 
     # خصم قيمة الباقة
     user["balance"] -= amount
 
     # تفعيل الباقة
     user["package"] = {
-        "package_id": package_id,
+        "id": package_id,
         "amount": amount,
-        "days": days,
-        "daily_profit": int(
-            package.get("daily_profit", 0)
-        ),
-        "total_profit": int(
-            package.get("total_profit", 0)
-        ),
-        "start_time": int(time.time()),
+        "daily_profit": int(package["daily_profit"]),
+        "total_profit": int(package["total_profit"]),
+        "days": int(package["days"]),
         "days_paid": 0,
+        "start_time": int(time.time()),
         "active": True
     }
 
-    # زيادة عدد الباقات
+    # تحديث الإحصائيات
     user["total_packages"] = (
-        user.get("total_packages", 0) + 1
+        int(user.get("total_packages", 0)) + 1
     )
 
-    await query.message.edit_text(
-        f"""
-تم تفعيل الباقة بنجاح.
-
-الباقة: {amount:,} د.ع
-المدة: {days} أيام
-
-رصيدك الحالي:
-{user["balance"]:,} د.ع
-"""
+    user["total_deposited"] = (
+        int(user.get("total_deposited", 0))
+        + amount
     )
 
-    await query.answer(
-        "تم تفعيل الباقة بنجاح."
+    context.user_data["package_confirm"] = False
+    context.user_data["selected_package"] = None
+
+    # رجوع للكيبورد الرئيسي
+    keyboard = [
+        [
+            KeyboardButton("الباقات"),
+            KeyboardButton("الإيداع")
+        ],
+        [
+            KeyboardButton("السحب"),
+            KeyboardButton("حسابي")
+        ],
+        [
+            KeyboardButton("الإحالة"),
+            KeyboardButton("الدعم")
+        ]
+    ]
+
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True
     )
 
+    await update.message.reply_text(
+        f"""تم تفعيل الباقة بنجاح.
 
-# ===== معالجة أزرار الباقات =====
+المبلغ:
+{amount:,} د.ع.
 
-async def packages_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+الربح اليومي:
+{int(package["daily_profit"]):,} د.ع.
 
-    query = update.callback_query
+إجمالي الربح:
+{int(package["total_profit"]):,} د.ع.
 
-    data = query.data
+مدة الباقة:
+{int(package["days"])} أيام.
 
-    # عرض تفاصيل الباقة
-    if data.startswith("package_view:"):
-
-        package_id = data.split(":", 1)[1]
-
-        await package_view(
-            query,
-            package_id
-        )
-
-        return
-
-    # الاشتراك
-    if data.startswith("subscribe:"):
-
-        package_id = data.split(":", 1)[1]
-
-        await subscribe_package(
-            query,
-            package_id
-        )
-
-        return
-
-    # الرجوع للباقات
-    if data == "packages_back":
-
-        buttons = []
-
-        active_packages = []
-
-        for package_id, package in packages_data.items():
-
-            if not package.get("active", True):
-                continue
-
-            amount = int(
-                package.get("amount", 0)
-            )
-
-            if amount <= 0:
-                continue
-
-            active_packages.append(
-                (package_id, amount)
-            )
-
-        active_packages.sort(
-            key=lambda x: x[1]
-        )
-
-        for package_id, amount in active_packages:
-
-            buttons.append([
-                InlineKeyboardButton(
-                    f"{amount:,} د.ع",
-                    callback_data=f"package_view:{package_id}"
-                )
-            ])
-
-        buttons.append([
-            InlineKeyboardButton(
-                "رجوع للقائمة الرئيسية",
-                callback_data="main_menu"
-            )
-        ])
-
-        await query.message.edit_text(
-            "الباقات المتاحة:",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-
-        await query.answer()
-
-        return
-
-    await query.answer()
+تم خصم مبلغ الباقة من رصيدك.""",
+        reply_markup=reply_markup
+    )
 
 # ===== حالة الباقة =====
 
