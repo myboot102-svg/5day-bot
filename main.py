@@ -322,141 +322,57 @@ async def account(
 
 # ===== قسم الباقات =====
 
-async def packages(
+async def package_message_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-    if not packages_data:
-        await update.message.reply_text(
-            "لا توجد باقات متاحة حالياً."
-        )
-        return
-
-    keyboard = []
-    row = []
-
-    for package_id, package in packages_data.items():
-
-        if not package.get("active", True):
-            continue
-
-        amount = int(package["amount"])
-
-        row.append(
-            KeyboardButton(
-                f"{amount:,} د.ع"
-            )
-        )
-
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-
-    if row:
-        keyboard.append(row)
-
-    keyboard.append(
-        [KeyboardButton("رجوع للقائمة الرئيسية")]
-    )
-
-    reply_markup = ReplyKeyboardMarkup(
-        keyboard,
-        resize_keyboard=True
-    )
-
-    context.user_data["package_selection"] = True
-    context.user_data["package_confirm"] = False
-
-    await update.message.reply_text(
-        "الباقات المتاحة:",
-        reply_markup=reply_markup
-    )
-
-
-# ===== اختيار الباقة =====
-
-async def package_selection(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-
-    if not context.user_data.get("package_selection"):
-        return
-
     text = update.message.text.strip()
 
     if text == "رجوع للقائمة الرئيسية":
-
-        context.user_data["package_selection"] = False
-        context.user_data["package_confirm"] = False
-        context.user_data["selected_package"] = None
-
         await start(update, context)
         return
 
-    amount_text = (
-        text
-        .replace("د.ع", "")
-        .replace(",", "")
-        .strip()
-    )
-
-    if not amount_text.isdigit():
+    if not text.endswith("د.ع"):
         return
 
-    amount = int(amount_text)
-
-    package_id = str(amount)
-    package = packages_data.get(package_id)
-
-    if not package:
-        await update.message.reply_text(
-            "هذه الباقة غير موجودة."
+    try:
+        amount = int(
+            text.replace("د.ع", "")
+                .replace(",", "")
+                .strip()
         )
+    except ValueError:
         return
 
-    if not package.get("active", True):
+    package = packages_data.get(str(amount))
+
+    if not package or not package.get("active", True):
         await update.message.reply_text(
             "هذه الباقة غير متاحة حالياً."
         )
         return
 
-    context.user_data["selected_package"] = package_id
-    context.user_data["package_selection"] = False
-    context.user_data["package_confirm"] = True
+    daily = package.get("daily_profit", 0)
+    total = package.get("total_profit", 0)
+    days = package.get("days", 5)
 
     keyboard = [
-        [
-            KeyboardButton("اشتراك"),
-            KeyboardButton("رجوع")
-        ]
+        ["اشتراك"],
+        ["العودة للباقات"]
     ]
 
-    reply_markup = ReplyKeyboardMarkup(
-        keyboard,
-        resize_keyboard=True
-    )
-
     await update.message.reply_text(
-        f"""تفاصيل الباقة.
-
-المبلغ:
-{amount:,} د.ع.
-
-الربح اليومي:
-{int(package["daily_profit"]):,} د.ع.
-
-إجمالي الربح:
-{int(package["total_profit"]):,} د.ع.
-
-مدة الباقة:
-{int(package["days"])} أيام.
-
-يرجى قراءة الشروط والأحكام قبل الاشتراك.""",
-        reply_markup=reply_markup
+        f"تفاصيل الباقة.\n\n"
+        f"المبلغ: {amount:,} د.ع\n"
+        f"المدة: {days} أيام\n"
+        f"العائد اليومي المعلن: {daily:,} د.ع\n"
+        f"إجمالي العائد المعلن: {total:,} د.ع\n\n"
+        f"إذا تريد المتابعة اضغط اشتراك.",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=True
+        )
     )
-
-
 # ===== تأكيد الاشتراك =====
 
 async def package_confirm(
