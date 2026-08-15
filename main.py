@@ -934,6 +934,30 @@ async def message_router(
     user_id = update.effective_user.id
     text = update.message.text
 
+    # الصقي الكود هنا
+    if text == "الباقات":
+        await packages(update, context)
+        return
+
+    if text in [
+        "10,000 د.ع", "20,000 د.ع",
+        "30,000 د.ع", "40,000 د.ع",
+        "50,000 د.ع", "60,000 د.ع",
+        "70,000 د.ع", "80,000 د.ع",
+        "90,000 د.ع", "100,000 د.ع",
+        "200,000 د.ع", "300,000 د.ع",
+        "400,000 د.ع", "500,000 د.ع",
+        "1,000,000 د.ع", "5,000,000 د.ع",
+        "10,000,000 د.ع", "15,000,000 د.ع"
+    ]:
+        await package_details(update, context)
+        return
+
+    if text in ["اشتراك", "العودة للباقات"]:
+        await package_confirm(update, context)
+        return
+
+
     state = get_state(user_id)
 
     # ===== حالات الإدارة =====
