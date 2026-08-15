@@ -633,4 +633,11 @@ app.add_handler(
     )
 )
 
+app.add_handler(
+    MessageHandler(
+        filters.PHOTO,
+        support_message_handler
+    )
+)
+
 app.run_polling()
