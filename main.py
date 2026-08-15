@@ -270,47 +270,94 @@ async def account(
     )
 
 
-# ===== الباقات =====
+# ===== قسم الباقات =====
+
+def package_amounts():
+
+    amounts = []
+
+    # 10,000 إلى 100,000
+    for amount in range(10_000, 100_001, 10_000):
+        amounts.append(amount)
+
+    # 200,000 إلى 1,000,000
+    for amount in range(200_000, 1_000_001, 100_000):
+        amounts.append(amount)
+
+    # 1,000,000 إلى 15,000,000
+    for amount in range(1_500_000, 15_000_001, 500_000):
+        amounts.append(amount)
+
+    return amounts
+
 
 async def packages(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    if not packages_data:
-
-        await update.message.reply_text(
-            "لا توجد باقات مضافة حالياً."
-        )
-
-        return
-
-    buttons = []
-
-    for package_id, package in packages_data.items():
-
-        if not package["active"]:
-            continue
-
-        buttons.append([
-            InlineKeyboardButton(
-                f'{package["amount"]:,} د.ع.',
-                callback_data=f"package_view:{package_id}"
-            )
-        ])
-
-    if not buttons:
-
-        await update.message.reply_text(
-            "لا توجد باقات فعالة حالياً."
-        )
-
-        return
+    keyboard = [
+        ["10,000 - 100,000 د.ع"],
+        ["100,000 - 1,000,000 د.ع"],
+        ["1,000,000 - 15,000,000 د.ع"],
+        ["رجوع للقائمة الرئيسية"]
+    ]
 
     await update.message.reply_text(
         "الباقات المتاحة:",
-        reply_markup=InlineKeyboardMarkup(
-            buttons
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=True
+        )
+    )
+
+
+async def package_category(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    category: str
+):
+
+    amounts = package_amounts()
+
+    if category == "small":
+
+        amounts = [
+            x for x in amounts
+            if 10_000 <= x <= 100_000
+        ]
+
+    elif category == "medium":
+
+        amounts = [
+            x for x in amounts
+            if 200_000 <= x <= 1_000_000
+        ]
+
+    elif category == "large":
+
+        amounts = [
+            x for x in amounts
+            if 1_000_000 <= x <= 15_000_000
+        ]
+
+    keyboard = []
+
+    for amount in amounts:
+
+        keyboard.append([
+            f"{amount:,} د.ع"
+        ])
+
+    keyboard.append([
+        "رجوع للباقات"
+    ])
+
+    await update.message.reply_text(
+        "اختاري المبلغ:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=True
         )
     )
 
