@@ -1,6 +1,7 @@
-# -------- الاستيرادات --------
+# ===== الاستيرادات =====
 
 import os
+import time
 
 from telegram import (
     Update,
@@ -8,1478 +9,434 @@ from telegram import (
     InlineKeyboardMarkup,
     InlineKeyboardButton
 )
+
 from telegram.ext import (
     Application,
+    CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
     filters
 )
 
-# -------- المتغيرات --------
+
+# ===== الإعدادات الأساسية =====
+
 TOKEN = os.getenv("TOKEN")
 ADMIN_ID = 8460661282
+BOT_USERNAME = "FAIVEDAY5_bot"
 
-users = {}
-states = {}
-deposit_requests = []
 
-deposit_numbers = {
-    "زين كاش": "077XXXXXXXX",
-    "سوبر كي": "077XXXXXXXX",
-    "FIB": "077XXXXXXXX",
-    "اسيا حوالة": "077XXXXXXXX",
-    "USDT": "Txxxxxxxxx"
-}
+# ===== إعدادات الأرباح =====
 
-usdt_wallet = "0x66df098144E18aA2D8C95c9aeb333e78cD5D4992"
+PACKAGE_DAYS = 5
+PROFIT_PER_10000 = 100
 
-withdraw_requests = []
+
+# ===== إعدادات الإحالة =====
+
+REFERRAL_RATE = 0.05
+
+
+# ===== إعدادات السحب =====
 
 MIN_WITHDRAW = 8000
 WITHDRAW_FEE = 1000
 
 
-import time
+# ===== تعريف الحالات =====
 
-PACKAGE_DAYS = 5      # مدة الباقة
+STATE_NONE = "none"
 
+STATE_DEPOSIT = "deposit"
+STATE_DEPOSIT_AMOUNT = "deposit_amount"
+STATE_DEPOSIT_PHOTO = "deposit_photo"
 
+STATE_WITHDRAW = "withdraw"
+STATE_WITHDRAW_AMOUNT = "withdraw_amount"
+STATE_WITHDRAW_DETAILS = "withdraw_details"
 
-# -------- دوال مساعدة --------
-
-def get_user(user_id):
-    if user_id not in users:
-        users[user_id] = {
-            "balance": 0,
-            "profit": 0,
-            "package": None,
-            "total_deposited": 0,
-            "total_packages": 0,
-            "join_date": int(time.time()),
-            "ref_by": None,
-            "referrals": 0,
-            "referral_profit": 0,
-            "first_deposit_done": False,
-            "banned": False,
-            "total_profit": 0
-        }
-    return users[user_id]
+STATE_SUPPORT = "support"
+STATE_ADMIN_REPLY = "admin_reply"
 
 
-def set_state(context, state):
-    context.user_data["state"] = state
+# ===== تعريف الأزرار الشفافة =====
+
+DEPOSIT_CONFIRM = "deposit_confirm"
+DEPOSIT_CANCEL = "deposit_cancel"
+DEPOSIT_APPROVE = "deposit_approve"
+DEPOSIT_REJECT = "deposit_reject"
+
+WITHDRAW_CONFIRM = "withdraw_confirm"
+WITHDRAW_CANCEL = "withdraw_cancel"
+WITHDRAW_APPROVE = "withdraw_approve"
+WITHDRAW_REJECT = "withdraw_reject"
+
+SUPPORT_REPLY = "support_reply"
+SUPPORT_CANCEL = "support_cancel"
 
 
-def get_state(context):
-    return context.user_data.get("state")
+# ===== بيانات المستخدمين =====
+
+users = {}
+
+deposit_requests = {}
+withdraw_requests = {}
+support_requests = {}
 
 
-def clear_state(context):
-    context.user_data["state"] = None
+# ===== بيانات الإحالة =====
+
+# صاحب الرابط الذي جاء منه المستخدم.
+# مثال:
+# user["referrer_id"] = 123456789
+
+# عند تفعيل الصديق لباقة:
+# referral_profit = package_amount * REFERRAL_RATE
+#
+# مثال:
+# 100,000 × 5% = 5,000 د.ع.
 
 
-def update_user_profit(user):
+# ===== رسالة الترحيب =====
 
-    if not user.get("package") or not user["package"]["active"]:
-        return
+WELCOME_MESSAGE = """
+أهلاً وسهلاً بك في بوت 5DAY.
 
-    now = int(time.time())
-    start = user["package"]["start_time"]
+اختار القسم المطلوب من القائمة أدناه.
+"""
 
-    days_passed = (now - start) // 86400
 
-    if days_passed <= 0:
-        return
+# ===== كيبورد المستخدم =====
 
-    payable_days = min(days_passed, PACKAGE_DAYS)
-
-    already_paid = user["package"]["days_paid"]
-
-    new_days = payable_days - already_paid
-
-    if new_days <= 0:
-        return
-
-    amount = user["package"]["amount"]
-
-    daily_profit = (amount // 10000) * 100
-
-    profit = new_days * daily_profit
-
-    user["balance"] += profit
-
-    user["package"]["days_paid"] += new_days
-
-    # انتهاء الباقة
-    if user["package"]["days_paid"] >= PACKAGE_DAYS:
-
-        user["balance"] += amount
-        user["package"]["active"] = False
-
-def main_menu(user_id):
+def user_keyboard(user_id):
 
     keyboard = [
-        ["💰 الباقات الاستثمارية"],
-        ["إيداع", "💸 سحب"],
-        ["حسابي", "📊 حالة الاشتراك"],
-        ["🔗 رابط الإحالة"]
+        ["الباقات", "حسابي"],
+        ["إيداع", "سحب"],
+        ["الإحالة", "حالة الباقة"],
+        ["الدعم"]
     ]
 
-    # 👑 زر الأدمن (يظهر بس للادمن)
     if user_id == ADMIN_ID:
-        keyboard.append(["⚙️ لوحة الأدمن"])
+        keyboard.append(["لوحة الإدارة"])
 
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-
-def deposit_menu():
-    keyboard = [[name] for name in deposit_numbers.keys()]
-    keyboard.append(["رجوع"])
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True
+    )
 
 
-def back_menu():
-    return ReplyKeyboardMarkup([["رجوع"]], resize_keyboard=True)
+# ===== كيبورد الإدارة =====
+
+def admin_keyboard():
+
+    keyboard = [
+        ["طلبات الإيداع", "طلبات السحب"],
+        ["رسائل الدعم", "المستخدمين"],
+        ["الإحصائيات"],
+        ["رجوع"]
+    ]
+
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True
+    )
 
 
-# -------- الهاندل --------
-async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ===== أمر البدء =====
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
-    user = get_user(user_id)
-    state = get_state(context)
-    
-    if user.get("banned"):
-        await update.message.reply_text("🚫 انت محظور")
-        return
-    
-    # ===== تحديث الأرباح =====
 
-    if user["package"] and user["package"]["active"]:
+    await update.message.reply_text(
+        WELCOME_MESSAGE,
+        reply_markup=user_keyboard(user_id)
+    )
 
-        now = int(time.time())
 
-        start_time = user["package"]["start_time"]
-        
+# ===== حسابي =====
 
-        # نحسب كم يوم مر (من بعد يوم التفعيل)
-        days_passed = (now - start_time) // 86400
+async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-        # الربح يبدأ من اليوم الثاني
-        if days_passed > 0:
+    pass
 
-            # كم يوم لازم ندفع له بعد
-            days_to_pay = days_passed - user["package"]["days_paid"]
 
-            if days_to_pay > 0:
+# ===== الباقات =====
 
-                amount = user["package"]["amount"]
+async def packages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-                daily_profit = (amount // 10000) * 100
+    pass
 
-                # نحسب الربح الكلي
-                profit = daily_profit * days_to_pay
 
-                # نضيفه
-                user["balance"] += profit
-                user["profit"] += profit
+# ===== حالة الباقة =====
 
-                user["total_profit"] += profit
+async def package_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-                # نحدث الأيام
-                user["package"]["days_paid"] += days_to_pay
+    pass
 
-                user["package"]["last_profit_time"] = now
 
-        # ===== انتهاء الباقة =====
-        if user["package"]["days_paid"] >= PACKAGE_DAYS and user["package"]["active"]:
+# ===== الإيداع =====
 
-            # رجوع رأس المال
-            user["balance"] += user["package"]["amount"]
+async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-            # ايقاف الباقة
-            user["package"]["active"] = False
+    pass
 
-    # ====== رسائل ======
-    if update.message:
 
-        text = update.message.text or ""
+# ===== استقبال صورة الإيداع =====
 
-        # ===== ستارت =====
-        if text.startswith("/start"):
+async def deposit_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-            parts = text.split()
+    pass
 
-            referrer_id = None
 
-            if len(parts) > 1:
-                try:
-                    referrer_id = int(parts[1])
-                except:
-                    referrer_id = None
+# ===== السحب =====
 
-            # ===== نظام الإحالة =====
-            if referrer_id and referrer_id != user_id:
+async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-                if user["ref_by"] is None:
+    pass
 
-                    user["ref_by"] = referrer_id
 
-                    ref_user = get_user(referrer_id)
+# ===== الإحالة =====
 
-                    ref_user["referrals"] += 1
+async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-                    # 💸 مكافأة التسجيل
-                    ref_user["balance"] += 10
-                    ref_user["referral_profit"] += 10
+    user_id = update.effective_user.id
 
-                    # 🔔 إشعار
-                    await context.bot.send_message(
-                        chat_id=referrer_id,
-                        text="🎉 تم تسجيل شخص عن طريقك!\n💰 حصلت على 10 دينار"
-                    )
+    link = f"https://t.me/{BOT_USERNAME}?start=ref_{user_id}"
 
-            msg = """
-            
-أهلاً بك في بوت 5day للاستثمار الذكي
-
-يسعدنا انضمامك إلينا، نحن نوفر لك منصة آمنة وموثوقة لنمو رأس مالك من خلال خطط استثمارية قصيرة الأمد.
-
-تعريف برنامج الاستثمار:
-
-مدة الاستثمار: 5 أيام فقط لكل دورة استثمارية
-نظام الأرباح: تحصل على ربح 500 دينار لكل 10,000 دينار
-
-الشروط والأحكام:
-
-- يحق لكل مستخدم باقه واحده فقط
-- يتم تجميد رأس المال لمدة 5 أيام
-- يمكن سحب الأرباح يومياً
-- يمكن التجديد بعد انتهاء الباقة
-- تتحرر الأرباح مع رأس المال بعد انتهاء المدة
-
-
-            """
-
-            await update.message.reply_text(
-                msg,
-                reply_markup=main_menu(user_id)
-            )
-
-            return
-    
-        # ===== رجوع =====
-        if text == "رجوع":
-
-            clear_state(context)
-
-            await update.message.reply_text(
-                "رجعنا للقائمة الرئيسية",
-                reply_markup=main_menu(user_id)
-            )
-            return
-
-        # ===== حسابي =====
-        
-        elif text == "حسابي":
-
-            now = int(time.time())
-
-            days_since_join = (now - user["join_date"]) // 86400
-
-            balance = user["balance"]
-            total_packages = user["total_packages"]
-            total_deposit = user["total_deposit"]
-            total_profit = user["total_profit"]
-
-            referrals = user["referrals"]
-            referral_profit = user["referral_profit"]
-
-            # 🔥 الإجمالي الكلي
-            total_all = total_deposit + total_profit
-
-            msg = f"""
-━━━━━━━━━━━━━━━
-        حسابي
-━━━━━━━━━━━━━━━
-
-• الرصيد: {balance}
-
-• عدد الباقات: {total_packages}
-• إجمالي رأس المال: {total_deposit}
-• إجمالي الأرباح: {total_profit}
-• الإجمالي الكلي: {total_all}
-
-━━━━━━━━━━━━━━━
-
-        الإحالات
-• عدد الإحالات: {referrals}
-• أرباح الإحالة: {referral_profit}
-
-━━━━━━━━━━━━━━━
-
-• عدد الأيام: {days_since_join}
-
-━━━━━━━━━━━━━━━
-            """
-
-            await update.message.reply_text(msg)
-            return
-
-        #----- الباقات الاستثماريه --=====
-        
-        elif text == "💰 الباقات الاستثمارية":
-
-            msg = "اختر مبلغ الاستثمار :"
-
-            kb = [
-                ["10،000", "20،000", "30،000"],
-                ["40،000", "50،000", "60،000"],
-                ["70،000", "80،000", "90،000"],
-                ["100،000", "200،000", "300،000"],
-                ["400،000", "500،000", "600،000"],
-                ["700،000", "800،000", "900،000"],
-                ["1،000،000"],
-                ["رجوع"]
-            ]
-
-            await update.message.reply_text(
-                msg,
-                reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
-            )
-
-            set_state(context, "choose_package")
-            return
-    
-    
-        #------- اختيار الباقه------
-        
-        elif get_state(context) == "choose_package":
-
-            if text == "رجوع":
-                await update.message.reply_text("رجعنا", reply_markup=main_menu(user_id))
-                clear_state(context)
-                return
-
-            # تنظيف الرقم (حتى يدعم 10،000)
-            clean_text = text.replace("،", "").replace(",", "")
-
-            if not clean_text.isdigit():
-                return
-
-            amount = int(clean_text)
-
-            if amount < 10000 or amount > 1000000 or amount % 10000 != 0:
-                await update.message.reply_text("اختار مبلغ صحيح")
-                return
-
-            # الربح اليومي
-            daily_profit = (amount // 10000) * 100
-
-            msg = f"""
-- تفاصيل الباقة :
-
-المبلغ: {amount}
-الربح اليومي: {daily_profit}
-المدة: {PACKAGE_DAYS} أيام
-
-- يبدأ الربح من اليوم الثاني
-- يتم استرجاع رأس المال بالكامل تلقائياً بعد انتهاء مدة التفعيل
-            """
-
-            kb = [["تأكيد"], ["رجوع"]]
-
-            # حفظ المبلغ
-            context.user_data["package_amount"] = amount
-
-            await update.message.reply_text(
-                msg,
-                reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
-            )
-
-            set_state(context, "confirm_package")
-            return
-    
-    
-        #------- تنفيذ الشراء ------
-        
-        elif get_state(context) == "confirm_package" and text == "تأكيد":
-
-            if user.get("package") and user["package"].get("active"):
-
-                await update.message.reply_text(
-                    "❌ لديك باقة مفعلة حالياً\n⏳ انتظر حتى تنتهي ثم يمكنك شراء باقة جديدة"
-                )
-                return
-
-            amount = context.user_data.get("package_amount")
-
-            if user["balance"] < amount:
-                await update.message.reply_text("رصيدك غير كافي ❌")
-                return
-
-            # خصم الرصيد
-            user["balance"] -= amount
-
-            user["total_packages"] += 1
-
-            # تفعيل الباقة
-            user["package"] = {
-                "amount": amount,
-                "start_time": int(time.time()),
-                "last_profit_time": int(time.time()),
-                "days_paid": 0,
-                "active": True
-            }
-
-
-            if user.get("ref_by") and not user["first_deposit_done"]:
-
-                ref_user = get_user(user["ref_by"])
-
-                bonus = (amount // 10000) * 100
-
-                ref_user["balance"] += bonus
-                ref_user["referral_profit"] += bonus
-
-                # نمنع التكرار
-                user["first_deposit_done"] = True
-                
-                # 🔔 إشعار
-                await context.bot.send_message(
-                    chat_id=user["ref_by"],
-                    text=f"🎉 صديقك فعل باقة!\n💰 حصلت على {bonus} دينار"
-                )
-
-            await update.message.reply_text("تم تفعيل الباقة ✅")
-
-            clear_state(context)
-            return
-    
-    
-    
-        #------- حالة الاشتراك --------
-        if text == "📊 حالة الاشتراك":
-
-            package = user.get("package")
-
-            if not package or not package.get("active"):
-                await update.message.reply_text("ما عندك اشتراك حالياً ❌")
-                return
-
-            amount = package["amount"]
-            days_paid = package["days_paid"]
-
-            daily_profit = (amount // 10000) * 100
-
-            remaining_days = PACKAGE_DAYS - days_paid
-
-            total_profit = daily_profit * days_paid
-
-            msg = f"""
-📊 حالة الاشتراك
-
-💰 قيمة الباقة: {amount}
-📈 الربح اليومي: {daily_profit}
-
-📅 الأيام المدفوعة: {days_paid}
-⏳ الأيام المتبقية: {remaining_days}
-
-💵 إجمالي الأرباح: {total_profit}
-            """
-
-            await update.message.reply_text(msg)
-            return
-    
-    
-        #------- رابط الاحاله -------
-        elif text == "🔗 رابط الإحالة":
-
-            bot_username = "daay5_bot"
-
-            link = f"https://t.me/{bot_username}?start={user_id}"
-
-            msg = f"""
-🔗 رابط الإحالة الخاص بك:
+    await update.message.reply_text(
+        f"""
+رابط الإحالة الخاص بك:
 
 {link}
 
-📌 شاركه واربح:
-• 10 دينار لكل تسجيل
-• 100 دينار لكل 10,000 أول باقة
-            """
+نسبة الإحالة:
+5%
 
-            await update.message.reply_text(msg)
-            return
-    
-    
-    
-        #========= الايداع=======
-        elif text == "إيداع" and state is None:
+تحصل على 5% من قيمة باقة صديقك عند تفعيلها.
+"""
+    )
 
-            msg = """
-⚠️ تنبيه
 
-تأكد من التحويل الصحيح قبل إرسال الطلب.
+# ===== تفعيل ربح الإحالة =====
 
-الإدارة غير مسؤولة عن أي خطأ في الرقم أو المبلغ.
+async def give_referral_profit(
+    user_id,
+    package_amount,
+    context
+):
 
-اضغط موافق للمتابعة
-            """
+    user = users.get(user_id)
 
-            kb = [
-                ["✅ موافق"],
-                ["رجوع"]
-            ]
+    if not user:
+        return
 
-            await update.message.reply_text(
-                msg,
-                reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
-            )
+    referrer_id = user.get("referrer_id")
 
-            set_state(context, "deposit_warning")
-            return
-  
-  
-        #------ بعد الموافقه اختيار المحفظه ---
-        elif get_state(context) == "deposit_warning":
+    if not referrer_id:
+        return
 
-            if text == "رجوع":
-                await update.message.reply_text(
-                    "تم الإلغاء",
-                    reply_markup=main_menu(user_id)
-                )
-                clear_state(context)
-                return
+    referral_profit = int(
+        package_amount * REFERRAL_RATE
+    )
 
-            if text == "✅ موافق":
+    referrer = users.get(referrer_id)
 
-                kb = [
-                    ["زين كاش", "سوبر كي"],
-                    ["FIB", "اسيا حوالة"],
-                    ["اسيا كارد", "زين (اثير)"],
-                    ["USDT"],
-                    ["رجوع"]
-                ]
+    if not referrer:
+        return
 
-                await update.message.reply_text(
-                    "اختر المحفظة",
-                    reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
-                )
+    referrer["referral_profit"] = (
+        referrer.get("referral_profit", 0)
+        + referral_profit
+    )
 
-                set_state(context, "deposit_wallet")
-                return
-  
+    # هذا الرصيد لاحقاً نربطه بالنظام المالي بعد إكماله.
+    referrer["balance"] = (
+        referrer.get("balance", 0)
+        + referral_profit
+    )
 
-        #---- اختار المحفظه-----
-        elif get_state(context) == "deposit_wallet":
+    await context.bot.send_message(
+        chat_id=referrer_id,
+        text=f"""
+حصلت على ربح إحالة.
 
-            if text == "رجوع":
-                await update.message.reply_text(
-                    "رجعنا للقائمة",
-                    reply_markup=main_menu(user_id)
-                )
-                clear_state(context)
-                return
+باقة صديقك:
+{package_amount:,} د.ع.
 
-            context.user_data["wallet"] = text
+ربح الإحالة:
+{referral_profit:,} د.ع.
 
+النسبة:
+5%
+"""
+    )
 
-        #----- محافظ عاديه-----
-        if get_state(context) == "deposit_wallet" and text in deposit_numbers:
 
-            await update.message.reply_text("اكتب مبلغ الإيداع")
+# ===== الدعم =====
 
-            set_state(context, "deposit_amount")
-            return
+async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    pass
 
-        #----- محافظ الكارت-----
-        elif text in ["اسيا كارد", "زين (اثير)"]:
 
-            await update.message.reply_text("اكتب مبلغ الكارت")
+# ===== لوحة الإدارة =====
 
-            set_state(context, "card_amount")
-            return
+async def admin_panel(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
+    if update.effective_user.id != ADMIN_ID:
+        return
 
-        #------ محافظ يو اس دي------
-        elif text == "USDT":
+    await update.message.reply_text(
+        "لوحة الإدارة.",
+        reply_markup=admin_keyboard()
+    )
 
-            msg = f"""
-قم بالتحويل على شبكة TRC20
 
-العنوان:
+# ===== أزرار الإدارة =====
 
-{usdt_wallet}
+async def admin_buttons(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-ثم ارسل سكرين التحويل
-            """
+    if update.effective_user.id != ADMIN_ID:
+        return
 
-            await update.message.reply_text(msg)
+    text = update.message.text
 
-            set_state(context, "usdt_image")
-            return
+    if text == "طلبات الإيداع":
+        pass
 
+    elif text == "طلبات السحب":
+        pass
 
-        #----- كتابة مبلغ المحفظه العاديه-------
-        elif get_state(context) == "deposit_amount":
+    elif text == "رسائل الدعم":
+        pass
 
-            context.user_data["amount"] = text
+    elif text == "المستخدمين":
+        pass
 
-            await update.message.reply_text("اكتب اسم المرسل")
+    elif text == "الإحصائيات":
+        pass
 
-            set_state(context, "deposit_name")
-            return
+    elif text == "رجوع":
+        await start(update, context)
 
 
-        #----- اسم المرسل------
-        elif get_state(context) == "deposit_name":
+# ===== الأزرار الشفافة =====
 
-            context.user_data["name"] = text
+async def callback_handler(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-            await update.message.reply_text("اكتب رقم المرسل")
+    query = update.callback_query
 
-            set_state(context, "deposit_sender")
-            return
+    await query.answer()
 
+    data = query.data
 
-        #---- رقم المرسل واضهار رقم التحويل------
-        elif get_state(context) == "deposit_sender":
+    if data.startswith(DEPOSIT_APPROVE):
+        pass
 
-            context.user_data["sender"] = text
+    elif data.startswith(DEPOSIT_REJECT):
+        pass
 
-            wallet = context.user_data["wallet"]
+    elif data.startswith(WITHDRAW_APPROVE):
+        pass
 
-            number = deposit_numbers[wallet]
+    elif data.startswith(WITHDRAW_REJECT):
+        pass
 
-            msg = f"""
-قم بالتحويل على الرقم التالي خلال 10 دقائق
+    elif data.startswith(SUPPORT_REPLY):
+        pass
 
-{number}
 
-ثم ارسل سكرين التحويل
-            """
+# ===== معالج الرسائل =====
 
-            await update.message.reply_text(msg)
+async def message_handler(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-            set_state(context, "deposit_image")
-            return
+    text = update.message.text
 
+    if text == "لوحة الإدارة":
 
-        #------ نظام الكارت الكوود---------
-        elif get_state(context) == "card_amount":
+        await admin_panel(update, context)
 
-            context.user_data["amount"] = text
+    elif text == "حسابي":
 
-            await update.message.reply_text("ارسل كود الكارت")
+        await account(update, context)
 
-            set_state(context, "card_code")
-            return
+    elif text == "الباقات":
 
+        await packages(update, context)
 
-        #----- كود الكارت------
-        elif get_state(context) == "card_code":
+    elif text == "إيداع":
 
-            context.user_data["code"] = text
+        await deposit(update, context)
 
-            await update.message.reply_text("ارسل صورة الكارت")
+    elif text == "سحب":
 
-            set_state(context, "card_image")
-            return
+        await withdraw(update, context)
 
-        #شرط الصور--------------
-        if update.message.photo:
+    elif text == "الإحالة":
 
-            state = get_state(context)
+        await referral(update, context)
 
-            if state in ["deposit_image", "card_image", "usdt_image"]:
+    elif text == "حالة الباقة":
 
-                photo = update.message.photo[-1].file_id
-                context.user_data["photo"] = photo
+        await package_status(update, context)
 
-                msg = f"""
-📋 تأكيد معلومات الإيداع
+    elif text == "الدعم":
 
-💳 الطريقة: {context.user_data.get("wallet")}
+        await support(update, context)
 
-💰 المبلغ: {context.user_data.get("amount")}
 
-👤 الاسم: {context.user_data.get("name","-")}
+# ===== معالج الصور =====
 
-📱 الرقم: {context.user_data.get("sender","-")}
+async def photo_handler(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-هل تريد إرسال الطلب؟
-                """
+    pass
 
-                sent = await update.message.reply_photo(
-                    photo=photo,
-                    caption=msg,
-                    reply_markup=ReplyKeyboardMarkup(
-                        [["✅ تأكيد الإرسال"], ["رجوع"]],
-                        resize_keyboard=True
-                    )
-                )
 
-                context.user_data["confirm_msg_id"] = sent.message_id
-                context.user_data["confirm_chat"] = update.effective_chat.id
+# ===== تشغيل البوت =====
 
-                set_state(context, "deposit_confirm")
+app = Application.builder().token(TOKEN).build()
 
-                return
+app.add_handler(
+    CommandHandler("start", start)
+)
 
-        #-------التاكيد----
-        elif get_state(context) == "deposit_confirm":
+app.add_handler(
+    CallbackQueryHandler(callback_handler)
+)
 
-            if text == "رجوع":
+app.add_handler(
+    MessageHandler(
+        filters.PHOTO,
+        photo_handler
+    )
+)
 
-                await update.message.reply_text(
-                    "تم إلغاء الطلب",
-                    reply_markup=main_menu(user_id)
-                )
+app.add_handler(
+    MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        message_handler
+    )
+)
 
-                clear_state(context)
-                return
 
-
-            if text == "✅ تأكيد الإرسال":
-
-                # حذف رسالة المعلومات والصورة
-                try:
-                    await context.bot.delete_message(
-                        chat_id=context.user_data["confirm_chat"],
-                        message_id=context.user_data["confirm_msg_id"]
-                    )
-                except:
-                    pass
-
-                # حذف رسالة زر التأكيد
-                try:
-                    await update.message.delete()
-                except:
-                    pass
-
-
-                # حفظ الطلب
-                req_id = len(deposit_requests)
-
-                deposit_requests.append({
-                    "id": req_id,
-                    "user_id": user_id,
-                    "wallet": context.user_data.get("wallet"),
-                    "amount": context.user_data.get("amount"),
-                    "name": context.user_data.get("name"),
-                    "sender": context.user_data.get("sender"),
-                    "photo": context.user_data.get("photo")
-                })  
-
-
-                await update.message.reply_text(
-                    "✅ تم ارسال طلب الإيداع\n⏳ جاري المعالجة (1 - 2 ساعة)",
-                    reply_markup=main_menu(user_id)
-                )
-
-                clear_state(context)
-                return
-
-
-        #========= السحب======
-
-        elif text == "💸 سحب":
-
-            msg = """
-⚠️ تنبيه
-
-تأكد من إدخال معلوماتك بشكل صحيح.
-
-الإدارة غير مسؤولة عن أي خطأ.
-
-هل تريد المتابعة؟
-            """
-
-            kb = [["✅ موافق"], ["رجوع"]]
-
-            await update.message.reply_text(
-                msg,
-                reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
-            )
-
-            set_state(context, "withdraw_warning")
-            return
-
-
-        #------- بعد الموافقه ----
-        elif get_state(context) == "withdraw_warning":
-
-            if text == "رجوع":
-                clear_state(context)
-                await update.message.reply_text("تم الإلغاء", reply_markup=main_menu(user_id))
-                return
-
-            if text == "✅ موافق":
-
-                await update.message.reply_text("💰 اكتب مبلغ السحب")
-
-                set_state(context, "withdraw_amount")
-                return
-
-        
-        #------- المبلغ و العموله ----
-        elif get_state(context) == "withdraw_amount":
-
-            if not text.isdigit():
-                await update.message.reply_text("اكتب رقم صحيح")
-                return
-
-            amount = int(text)
-
-            if amount < MIN_WITHDRAW:
-                await update.message.reply_text(f"❌ الحد الأدنى للسحب {MIN_WITHDRAW}")
-                return
-
-            total = amount + WITHDRAW_FEE
-
-            if total > user["balance"]:
-                await update.message.reply_text(f"رصيدك غير كافي ❌\nالمطلوب: {total}")
-                return
-
-            context.user_data["amount"] = amount
-            context.user_data["total"] = total
-
-            kb = [
-                ["زين كاش.", "سوبر كي."],
-                ["FIB.", "اسيا حوالة."],
-                ["USDT."],
-                ["رجوع"]
-            ]
-
-            await update.message.reply_text(
-                f"""
-💰 تفاصيل السحب
-
-المبلغ: {amount}
-العمولة: {WITHDRAW_FEE}
-الصافي: {amount - WITHDRAW_FEE}
-
-اختر الطريقة
-                """,
-                reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
-            )
-
-            set_state(context, "withdraw_method")
-            return
-
-
-        #-------- الطريقه ------
-        elif get_state(context) == "withdraw_method":
-
-            if text == "رجوع":
-                clear_state(context)
-                await update.message.reply_text("تم الإلغاء", reply_markup=main_menu(user_id))
-                return
-
-            context.user_data["method"] = text
-
-            await update.message.reply_text("👤 اكتب الاسم")
-
-            set_state(context, "withdraw_name")
-            return
-
-
-        #------ الاسم-----
-        elif get_state(context) == "withdraw_name":
-
-            context.user_data["name"] = text
-
-            await update.message.reply_text("📱 اكتب الرقم أو العنوان")
-
-            set_state(context, "withdraw_number")
-            return
-
-        #----- الرقم -----
-        elif get_state(context) == "withdraw_number":
-
-            context.user_data["number"] = text
-
-            await update.message.reply_text("📷 ارسل الباركود")
-
-            set_state(context, "withdraw_barcode")
-            return
-
-        #------- باركود و تاكيد ------
-        if update.message.photo and get_state(context) == "withdraw_barcode":
-
-            photo = update.message.photo[-1].file_id
-            context.user_data["photo"] = photo
-
-            msg = f"""
-📋 تأكيد السحب
-
-💰 {context.user_data["amount"]}
-💸 العمولة: {WITHDRAW_FEE}
-📥 الصافي: {context.user_data["amount"] - WITHDRAW_FEE}
-
-💳 {context.user_data["method"]}
-👤 {context.user_data["name"]}
-📱 {context.user_data["number"]}
-
-تأكيد؟
-            """
-
-            sent = await update.message.reply_photo(
-                photo=photo,
-                caption=msg,
-                reply_markup=ReplyKeyboardMarkup(
-                    [["✅ تأكيد السحب"], ["رجوع"]],
-                    resize_keyboard=True
-                )
-            )
-
-            context.user_data["confirm_msg_id"] = sent.message_id
-
-            set_state(context, "withdraw_confirm")
-            return
-
-        #----- تاكيد السحب ----
-        elif get_state(context) == "withdraw_confirm":
-
-            if text == "رجوع":
-                clear_state(context)
-                await update.message.reply_text("تم الإلغاء", reply_markup=main_menu(user_id))
-                return
-
-
-            if text == "✅ تأكيد السحب":
-
-                # حذف رسالة التأكيد
-                try:
-                    await context.bot.delete_message(
-                        chat_id=user_id,
-                        message_id=context.user_data["confirm_msg_id"]
-                    )
-                except:
-                    pass
-
-                user["balance"] -= context.user_data["amount"]
-
-                req_id = len(withdraw_requests)
-
-                withdraw_requests.append({
-                    "id": req_id,
-                    "user_id": user_id,
-                    "amount": context.user_data["amount"],
-                    "method": context.user_data["method"],
-                    "name": context.user_data["name"],
-                    "number": context.user_data["number"],
-                    "photo": context.user_data["photo"]
-                })
-
-                await update.message.reply_text(
-                    "📥 تم استلام طلب السحب\n🔄 الطلب قيد المراجعة حالياً\n⏳ سيتم إتمام المعالجة خلال 24 ساعة كحد أقصى",
-                    reply_markup=main_menu(user_id)
-                )
-
-                clear_state(context)
-                return
-
-
-
-        #------- لوحة الادمن -------
-        
-        elif text == "⚙️ لوحة الأدمن" and user_id == ADMIN_ID:
-
-            kb = [
-                ["🔍 بحث عن مستخدم"],
-                ["📥 طلبات الإيداع", "📤 طلبات السحب"],
-                ["💳 تغيير أرقام المحافظ"],
-                ["📢 رسالة جماعية"],
-                ["رجوع"]
-            ]
-
-            await update.message.reply_text(
-                "👑 لوحة الأدمن",
-                reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
-            )
-
-            set_state(context, "admin_panel")
-            return
-        
-        
-        
-        #------ بحث عن مستخدم ----
-
-        elif text == "🔍 بحث عن مستخدم":
-            await update.message.reply_text("ارسل ID المستخدم")
-            set_state(context, "admin_search")
-            return
-        
-        #------- ايدي وعرض ------
-        
-        elif get_state(context) == "admin_search":
-
-            if not text.isdigit():
-                await update.message.reply_text("ارسل ID صحيح")
-                return
-
-            target_id = int(text)
-
-            if target_id not in users:
-                await update.message.reply_text("المستخدم غير موجود")
-                return
-
-            target = users[target_id]
-
-            package = target.get("package")
-
-            if package and package.get("active"):
-                package_text = f"مفعل ({package['amount']})"
-            else:
-                package_text = "لا يوجد"
-
-            msg = f"""
-👤 معلومات المستخدم
-
-🆔 ID: {target_id}
-
-💰 الرصيد: {target["balance"]}
-📈 الأرباح: {target["profit"]}
-📦 الباقة: {package_text}
-            """
-
-            kb = [
-                ["➕ إضافة رصيد", "➖ خصم رصيد"],
-                ["🚫 حظر", "✅ فك حظر"],
-                ["📦 تفاصيل الباقة"],
-                ["رجوع"]
-            ]
-
-            context.user_data["target_id"] = target_id
-
-            await update.message.reply_text(
-                msg,
-                reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
-            )
-
-            set_state(context, "admin_actions")
-            return
-
-
-        #------ تفاصيل الباقه -----
-        elif get_state(context) == "admin_actions" and text == "📦 تفاصيل الباقة":
-
-            target_id = context.user_data["target_id"]
-            target = users[target_id]
-
-            package = target.get("package")
-
-            if not package or not package.get("active"):
-                await update.message.reply_text("ما عنده باقة حالياً")
-                return
-
-            msg = f"""
-📦 تفاصيل الباقة
-
-💰 المبلغ: {package["amount"]}
-📅 الأيام المدفوعة: {package["days_paid"]}
-⏳ الحالة: مفعلة
-            """
-
-            await update.message.reply_text(msg)
-            return
-
-
-        #--------- اضافة رصيد -----
-        elif get_state(context) == "admin_actions" and text == "➕ إضافة رصيد":
-
-            await update.message.reply_text("اكتب المبلغ")
-            set_state(context, "admin_add")
-            return
-
-
-        elif get_state(context) == "admin_add":
-
-            if not text.isdigit():
-                return
-
-            amount = int(text)
-
-            target_id = context.user_data["target_id"]
-
-            users[target_id]["balance"] += amount
-
-            await update.message.reply_text("تمت الإضافة ✅")
-
-            clear_state(context)
-            return
-
-
-        #------- خصم الرصيد -----
-        elif get_state(context) == "admin_actions" and text == "➖ خصم رصيد":
-
-            await update.message.reply_text("اكتب المبلغ")
-            set_state(context, "admin_sub")
-            return
-
-
-        elif get_state(context) == "admin_sub":
-
-            if not text.isdigit():
-                return
-
-            amount = int(text)
-
-            target_id = context.user_data["target_id"]
-
-            users[target_id]["balance"] -= amount
-
-            await update.message.reply_text("تم الخصم ✅")
-
-            clear_state(context)
-            return
-
-
-        #-------- الحظر ------
-        elif get_state(context) == "admin_actions" and text == "🚫 حظر":
-
-            target_id = context.user_data["target_id"]
-
-            users[target_id]["banned"] = True
-
-            await update.message.reply_text("تم الحظر 🚫")
-
-            clear_state(context)
-            return
-
-
-        #------ فك الحظر ------
-        elif get_state(context) == "admin_actions" and text == "✅ فك حظر":
-
-            target_id = context.user_data["target_id"]
-
-            users[target_id]["banned"] = False
-
-            await update.message.reply_text("تم فك الحظر ✅")
-
-            clear_state(context)
-            return
-
-
-
-        #------- تفير المحافط -----
-        elif text == "💳 تغيير أرقام المحافظ" and user_id == ADMIN_ID:
-
-            kb = [
-                ["زين كاش", "سوبر كي"],
-                ["FIB", "اسيا حوالة"],
-                ["USDT"],
-                ["رجوع"]
-            ]
-
-            await update.message.reply_text(
-                "👇 اختر المحفظة للتعديل",
-                reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
-            )
-
-            set_state(context, "admin_edit_wallet")
-            return
-
-        #------- اختيار المحفظه -----
-        elif get_state(context) == "admin_edit_wallet" and user_id == ADMIN_ID:
-
-            if text == "رجوع":
-                clear_state(context)
-                await update.message.reply_text(
-                    "رجعنا للقائمة",
-                    reply_markup=main_menu(user_id)
-                )
-                return
-
-            if text not in deposit_numbers:
-                return
-
-            context.user_data["wallet_name"] = text
-
-            await update.message.reply_text(
-                f"✏️ ارسل الرقم الجديد لـ {text}"
-            )
-
-            set_state(context, "admin_edit_wallet_value")
-            return
-
-        #-------- حفظ الرقم -----
-        elif get_state(context) == "admin_edit_wallet_value" and user_id == ADMIN_ID:
-
-            wallet = context.user_data.get("wallet_name")
-
-            if not wallet:
-                clear_state(context)
-                return
-
-            deposit_numbers[wallet] = text
-
-            await update.message.reply_text(
-                f"✅ تم تحديث {wallet}\n\n📌 الرقم الجديد:\n{text}",
-                reply_markup=main_menu(user_id)
-            )
-
-            clear_state(context)
-            return
-
-
-        #----- رساله جماعيه -----
-        elif text == "📢 رسالة جماعية" and user_id == ADMIN_ID:
-
-            await update.message.reply_text("✉️ ارسل الرسالة (نص أو صورة)")
-
-            set_state(context, "admin_broadcast")
-            return
-
-
-        #----- استقبال النص ----
-        elif get_state(context) == "admin_broadcast" and user_id == ADMIN_ID:
-
-            sent = 0
-            failed = 0
-
-            for uid in users:
-
-                try:
-                    await context.bot.send_message(
-                        chat_id=uid,
-                        text=text
-                    )
-                    sent += 1
-                except:
-                    failed += 1
-
-                await update.message.reply_text(
-                    f"✅ تم الإرسال\n\n📤 وصل: {sent}\n❌ فشل: {failed}"
-                )
-
-                clear_state(context)
-                return
-
-
-        #------ صوره ----
-        if update.message.photo and get_state(context) == "admin_broadcast":
-
-            photo = update.message.photo[-1].file_id
-            caption = update.message.caption if update.message.caption else ""
-
-            sent = 0
-            failed = 0
-
-            for uid in users:
-
-                try:
-                    await context.bot.send_photo(
-                        chat_id=uid,
-                        photo=photo,
-                        caption=caption
-                    )
-                    sent += 1
-                except:
-                    failed += 1
-
-                    await update.message.reply_text(
-                        f"✅ تم الإرسال\n\n📤 وصل: {sent}\n❌ فشل: {failed}"
-                    )
-
-                clear_state(context)
-                return
-
-
-        #------ طلبات الايداع
-        
-        
-        elif text == "📥 طلبات الإيداع" and user_id == ADMIN_ID:
-            
-            if not deposit_requests:
-
-                await update.message.reply_text("لا يوجد طلبات حالياً")
-                return
-
-
-            for req in deposit_requests:
-
-                msg = f"""
-📥 طلب إيداع
-
-👤 ID : {req["user_id"]}
-
-💳 المحفظة : {req["wallet"]}
-
-💰 المبلغ : {req["amount"]}
-
-👤 الاسم : {req["name"]}
-
-📱 الرقم : {req["sender"]}
-                """
-
-                kb = InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton(
-                        "✅ قبول",
-                        callback_data=f"deposit_accept_{req['id']}"
-                        ),
-                        InlineKeyboardButton(
-                        "❌ رفض",
-                        callback_data=f"deposit_reject_{req['id']}"
-                        )
-                    ]
-                ])
-
-                await context.bot.send_photo(
-                    chat_id=ADMIN_ID,
-                    photo=req["photo"],
-                    caption=msg,
-                    reply_markup=kb
-                )
-    
-        #===== طلبات السحب =====
-        elif text == "📤 طلبات السحب" and user_id == ADMIN_ID:
-
-            if not withdraw_requests:
-                await update.message.reply_text("لا يوجد طلبات")
-                return
-
-            for req in withdraw_requests:
-
-                msg = f"""
-📤 طلب سحب
-
-👤 {req["user_id"]}
-
-💰 {req["amount"]}
-💸 {WITHDRAW_FEE}
-📥 {req["amount"] - WITHDRAW_FEE}
-
-💳 {req["method"]}
-👤 {req["name"]}
-📱 {req["number"]}
-                """
-
-                kb = InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton("✅ قبول", callback_data=f"w_acc_{req['id']}"),
-                        InlineKeyboardButton("❌ رفض", callback_data=f"w_rej_{req['id']}")
-                    ]
-                ])
-
-                await context.bot.send_photo(
-                    chat_id=ADMIN_ID,
-                    photo=req["photo"],
-                    caption=msg,
-                    reply_markup=kb
-                )
-    
-    
-    # ====== الأزرار الشفافة ======
-    elif update.callback_query:
-
-        query = update.callback_query
-        data = query.data
-
-        await query.answer()
-
-        #----- قبول-----
-        
-        if data.startswith("deposit_accept_"):
-
-            req_id = int(data.split("_")[2])
-
-            req = next((r for r in deposit_requests if r["id"] == req_id), None)
-
-            if not req:
-                await query.answer("الطلب غير موجود", show_alert=True)
-                return
-
-            user = get_user(req["user_id"])
-
-            user["balance"] += int(req["amount"])
-
-            user["total_deposit"] += int(req["amount"])
-
-            deposit_requests.remove(req)
-
-            await query.edit_message_caption(
-                caption="✅ تم قبول الطلب وإضافة الرصيد"
-            )
-
-            await context.bot.send_message(
-                chat_id=req["user_id"],
-                text=f"✅ تم قبول إيداعك\nتم إضافة {req['amount']} إلى رصيدك"
-            )
-    
-    
-        #------ رفض-----
-        elif data.startswith("deposit_reject_"):
-
-            req_id = int(data.split("_")[2])
-
-            req = next((r for r in deposit_requests if r["id"] == req_id), None)
-
-            if not req:
-                await query.answer("الطلب غير موجود", show_alert=True)
-                return
-
-            deposit_requests.remove(req)
-
-            await query.edit_message_caption(
-                caption="❌ تم رفض الطلب"
-            )
-
-            await context.bot.send_message(
-                chat_id=req["user_id"],
-                text="❌ تم رفض طلب الإيداع"
-            )
-
-
-
-        #====== قبول السحب =====
-        if data.startswith("w_acc_"):
-
-            req_id = int(data.split("_")[2])
-            req = next(r for r in withdraw_requests if r["id"] == req_id)
-
-            withdraw_requests.remove(req)
-
-            await query.edit_message_caption("✅ تم القبول")
-
-            net = req["amount"] - WITHDRAW_FEE
-
-            await context.bot.send_message(
-                chat_id=req["user_id"],
-                text=f"✅ تم تحويل {net} دينار"
-            )
-
-        #------- رفض السحب ---
-        elif data.startswith("w_rej_"):
-
-            req_id = int(data.split("_")[2])
-            req = next(r for r in withdraw_requests if r["id"] == req_id)
-
-            user = get_user(req["user_id"])
-            user["balance"] += req["amount"]
-
-            withdraw_requests.remove(req)
-
-            await query.edit_message_caption("❌ تم الرفض")
-
-            await context.bot.send_message(
-                chat_id=req["user_id"],
-                text=f"❌ تم رفض الطلب\nتم إعادة {req['amount']} دينار"
-            )
-        
-
-
-# -------- تشغيل --------
-app = Application.builder().token(BOT_TOKEN).build()
-
-app.add_handler(MessageHandler(filters.ALL, handle))
-app.add_handler(CallbackQueryHandler(handle))
-
-print("Bot Started...")
+# ===== نهاية الكود =====
 
 app.run_polling()
