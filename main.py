@@ -461,6 +461,38 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     )
 
+# ============================================================
+# استقبال رسائل الدعم
+# ============================================================
+
+async def support_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    message = update.message
+
+    if message.text:
+        context.user_data["support_draft"] = {
+            "type": "text",
+            "text": message.text
+        }
+
+        await message.reply_text(
+            "تم استلام رسالتك، سيتم تجهيزها للإرسال."
+        )
+
+    elif message.photo:
+        photo = message.photo[-1]
+
+        context.user_data["support_draft"] = {
+            "type": "photo",
+            "file_id": photo.file_id,
+            "caption": message.caption or ""
+        }
+
+        await message.reply_text(
+            "تم استلام الصورة، سيتم تجهيزها للإرسال."
+        )
+
+
 
 # ============================================================
 # HANDLER الرئيسي للأزرار
@@ -469,6 +501,11 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
+
+    if context.user_data.get("support_mode"):
+        await support_message_handler(update, context) 
+        
+    return
 
     # ========================================================
     # لوحة الإدارة
