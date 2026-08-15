@@ -1335,9 +1335,9 @@ app.add_handler(
 # ===== هاندل أزرار الباقات =====
 
 app.add_handler(
-    CallbackQueryHandler(
-        packages_callback,
-        pattern=r"^(package_view:|subscribe:|packages_back$)"
+    MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        package_message_handler
     )
 )
 
