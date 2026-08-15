@@ -1,7 +1,6 @@
 # ===== الاستيرادات =====
 
 import os
-import time
 
 from telegram import (
     Update,
@@ -26,84 +25,112 @@ TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 8460661282
 BOT_USERNAME = "FAIVEDAY5_bot"
 
+if not TOKEN:
+    raise RuntimeError("BOT_TOKEN غير موجود في Railway Variables")
 
-# ===== إعدادات الأرباح =====
+
+# ===== إعدادات الأرباح والإحالة =====
 
 PACKAGE_DAYS = 5
-PROFIT_PER_10000 = 100
-
-
-# ===== إعدادات الإحالة =====
-
+DAILY_PROFIT_PER_10000 = 100
+TOTAL_PROFIT_PER_10000 = 500
 REFERRAL_RATE = 0.05
-
-
-# ===== إعدادات السحب =====
-
-MIN_WITHDRAW = 8000
-WITHDRAW_FEE = 1000
 
 
 # ===== تعريف الحالات =====
 
 STATE_NONE = "none"
-
-STATE_DEPOSIT = "deposit"
-STATE_DEPOSIT_AMOUNT = "deposit_amount"
-STATE_DEPOSIT_PHOTO = "deposit_photo"
-
-STATE_WITHDRAW = "withdraw"
-STATE_WITHDRAW_AMOUNT = "withdraw_amount"
-STATE_WITHDRAW_DETAILS = "withdraw_details"
-
+STATE_ADD_PACKAGE = "add_package"
+STATE_EDIT_PACKAGE = "edit_package"
+STATE_ADD_DEPOSIT_WALLET = "add_deposit_wallet"
+STATE_ADD_WITHDRAW_WALLET = "add_withdraw_wallet"
+STATE_ADD_AGENT = "add_agent"
+STATE_BROADCAST = "broadcast"
 STATE_SUPPORT = "support"
 STATE_ADMIN_REPLY = "admin_reply"
 
 
 # ===== تعريف الأزرار الشفافة =====
 
-DEPOSIT_CONFIRM = "deposit_confirm"
-DEPOSIT_CANCEL = "deposit_cancel"
-DEPOSIT_APPROVE = "deposit_approve"
-DEPOSIT_REJECT = "deposit_reject"
+CB_PACKAGE_ADD = "package_add"
+CB_PACKAGE_EDIT = "package_edit"
+CB_PACKAGE_DELETE = "package_delete"
 
-WITHDRAW_CONFIRM = "withdraw_confirm"
-WITHDRAW_CANCEL = "withdraw_cancel"
-WITHDRAW_APPROVE = "withdraw_approve"
-WITHDRAW_REJECT = "withdraw_reject"
+CB_DEPOSIT_WALLET_DELETE = "deposit_wallet_delete"
+CB_WITHDRAW_WALLET_DELETE = "withdraw_wallet_delete"
 
-SUPPORT_REPLY = "support_reply"
-SUPPORT_CANCEL = "support_cancel"
+CB_AGENT_DELETE = "agent_delete"
+
+CB_SUPPORT_REPLY = "support_reply"
 
 
-# ===== بيانات المستخدمين =====
+# ===== البيانات =====
 
 users = {}
 
-deposit_requests = {}
-withdraw_requests = {}
-support_requests = {}
+packages_data = {}
+
+deposit_wallets = {}
+
+withdraw_wallets = {}
+
+agents = {}
+
+support_messages = {}
 
 
-# ===== بيانات الإحالة =====
+# ===== الحالات =====
 
-# صاحب الرابط الذي جاء منه المستخدم.
-# مثال:
-# user["referrer_id"] = 123456789
+user_states = {}
 
-# عند تفعيل الصديق لباقة:
-# referral_profit = package_amount * REFERRAL_RATE
-#
-# مثال:
-# 100,000 × 5% = 5,000 د.ع.
+
+# ===== الحصول على مستخدم =====
+
+def get_user(user_id):
+
+    if user_id not in users:
+
+        users[user_id] = {
+            "name": "",
+            "username": "",
+            "referrer_id": None,
+            "referrals": 0,
+            "referral_profit": 0
+        }
+
+    return users[user_id]
+
+
+# ===== تغيير حالة المستخدم =====
+
+def set_state(user_id, state):
+
+    user_states[user_id] = state
+
+
+def get_state(user_id):
+
+    return user_states.get(
+        user_id,
+        STATE_NONE
+    )
+
+
+def clear_state(user_id):
+
+    user_states[user_id] = STATE_NONE
 
 
 # ===== رسالة الترحيب =====
 
 WELCOME_MESSAGE = """
+━━━━━━━━━━━━━━━━━━
+
 أهلاً وسهلاً بك في بوت 5DAY.
 
-اختار القسم المطلوب من القائمة أدناه.
+اختار القسم المطلوب من القائمة.
+
+━━━━━━━━━━━━━━━━━━
 """
 
 
@@ -119,7 +146,9 @@ def user_keyboard(user_id):
     ]
 
     if user_id == ADMIN_ID:
-        keyboard.append(["لوحة الإدارة"])
+        keyboard.append(
+            ["لوحة الإدارة"]
+        )
 
     return ReplyKeyboardMarkup(
         keyboard,
@@ -132,8 +161,13 @@ def user_keyboard(user_id):
 def admin_keyboard():
 
     keyboard = [
+        ["إدارة الباقات"],
+        ["محافظ الإيداع", "محافظ السحب"],
+        ["إدارة الوكلاء"],
         ["طلبات الإيداع", "طلبات السحب"],
-        ["رسائل الدعم", "المستخدمين"],
+        ["رسائل الدعم"],
+        ["المستخدمين"],
+        ["رسالة جماعية"],
         ["الإحصائيات"],
         ["رجوع"]
     ]
@@ -146,9 +180,58 @@ def admin_keyboard():
 
 # ===== أمر البدء =====
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     user_id = update.effective_user.id
+
+    user = get_user(user_id)
+
+    user["name"] = update.effective_user.full_name or ""
+    user["username"] = update.effective_user.username or ""
+
+    clear_state(user_id)
+
+    # ===== الإحالة =====
+
+    if context.args:
+
+        argument = context.args[0]
+
+        if argument.startswith("ref_"):
+
+            try:
+
+                referrer_id = int(
+                    argument.replace(
+                        "ref_",
+                        "",
+                        1
+                    )
+                )
+
+                if (
+                    referrer_id != user_id
+                    and user["referrer_id"] is None
+                ):
+
+                    user["referrer_id"] = referrer_id
+
+                    referrer = get_user(
+                        referrer_id
+                    )
+
+                    referrer["referrals"] += 1
+
+                    await context.bot.send_message(
+                        chat_id=referrer_id,
+                        text="انضم صديق جديد عن طريق رابط الإحالة الخاص بك."
+                    )
+
+            except:
+                pass
 
     await update.message.reply_text(
         WELCOME_MESSAGE,
@@ -158,128 +241,254 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ===== حسابي =====
 
-async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def account(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-    pass
+    user = get_user(
+        update.effective_user.id
+    )
+
+    await update.message.reply_text(
+        f"""
+━━━━━━━━━━━━━━━━━━
+حسابي
+━━━━━━━━━━━━━━━━━━
+
+الاسم: {user["name"]}
+اليوزر: @{user["username"] or "بدون يوزر"}
+
+عدد الإحالات:
+{user["referrals"]}
+
+أرباح الإحالة:
+{user["referral_profit"]:,} د.ع.
+
+━━━━━━━━━━━━━━━━━━
+"""
+    )
 
 
 # ===== الباقات =====
 
-async def packages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def packages(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-    pass
+    if not packages_data:
+
+        await update.message.reply_text(
+            "لا توجد باقات مضافة حالياً."
+        )
+
+        return
+
+    buttons = []
+
+    for package_id, package in packages_data.items():
+
+        if not package["active"]:
+            continue
+
+        buttons.append([
+            InlineKeyboardButton(
+                f'{package["amount"]:,} د.ع.',
+                callback_data=f"package_view:{package_id}"
+            )
+        ])
+
+    if not buttons:
+
+        await update.message.reply_text(
+            "لا توجد باقات فعالة حالياً."
+        )
+
+        return
+
+    await update.message.reply_text(
+        "الباقات المتاحة:",
+        reply_markup=InlineKeyboardMarkup(
+            buttons
+        )
+    )
+
+
+# ===== تفاصيل الباقة =====
+
+async def package_view(
+    query,
+    package_id
+):
+
+    package = packages_data.get(
+        package_id
+    )
+
+    if not package:
+        await query.message.reply_text(
+            "الباقة غير موجودة."
+        )
+        return
+
+    await query.message.reply_text(
+        f"""
+━━━━━━━━━━━━━━━━━━
+تفاصيل الباقة
+━━━━━━━━━━━━━━━━━━
+
+المبلغ:
+{package["amount"]:,} د.ع.
+
+الربح اليومي:
+{package["daily_profit"]:,} د.ع.
+
+إجمالي الربح:
+{package["total_profit"]:,} د.ع.
+
+المدة:
+{package["days"]} أيام.
+"""
+    )
 
 
 # ===== حالة الباقة =====
 
-async def package_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def package_status(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-    pass
+    await update.message.reply_text(
+        "حالة الباقة سيتم عرضها هنا."
+    )
 
 
 # ===== الإيداع =====
 
-async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def deposit(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-    pass
+    if not deposit_wallets:
 
+        await update.message.reply_text(
+            "لا توجد محافظ إيداع متاحة حالياً."
+        )
 
-# ===== استقبال صورة الإيداع =====
+        return
 
-async def deposit_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    buttons = []
 
-    pass
+    for wallet_id, wallet in deposit_wallets.items():
+
+        buttons.append([
+            InlineKeyboardButton(
+                wallet["name"],
+                callback_data=f"deposit_wallet:{wallet_id}"
+            )
+        ])
+
+    await update.message.reply_text(
+        "اختار طريقة الإيداع:",
+        reply_markup=InlineKeyboardMarkup(
+            buttons
+        )
+    )
 
 
 # ===== السحب =====
 
-async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def withdraw(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-    pass
+    if not withdraw_wallets:
+
+        await update.message.reply_text(
+            "لا توجد طرق سحب متاحة حالياً."
+        )
+
+        return
+
+    buttons = []
+
+    for wallet_id, wallet in withdraw_wallets.items():
+
+        buttons.append([
+            InlineKeyboardButton(
+                wallet["name"],
+                callback_data=f"withdraw_wallet:{wallet_id}"
+            )
+        ])
+
+    await update.message.reply_text(
+        "اختار طريقة السحب:",
+        reply_markup=InlineKeyboardMarkup(
+            buttons
+        )
+    )
 
 
 # ===== الإحالة =====
 
-async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def referral(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     user_id = update.effective_user.id
 
-    link = f"https://t.me/{BOT_USERNAME}?start=ref_{user_id}"
+    user = get_user(user_id)
+
+    link = (
+        f"https://t.me/"
+        f"{BOT_USERNAME}"
+        f"?start=ref_{user_id}"
+    )
 
     await update.message.reply_text(
         f"""
-رابط الإحالة الخاص بك:
+━━━━━━━━━━━━━━━━━━
+الإحالة
+━━━━━━━━━━━━━━━━━━
+
+رابط الإحالة:
 
 {link}
 
 نسبة الإحالة:
 5%
 
-تحصل على 5% من قيمة باقة صديقك عند تفعيلها.
-"""
-    )
+عدد الإحالات:
+{user["referrals"]}
 
+أرباح الإحالة:
+{user["referral_profit"]:,} د.ع.
 
-# ===== تفعيل ربح الإحالة =====
-
-async def give_referral_profit(
-    user_id,
-    package_amount,
-    context
-):
-
-    user = users.get(user_id)
-
-    if not user:
-        return
-
-    referrer_id = user.get("referrer_id")
-
-    if not referrer_id:
-        return
-
-    referral_profit = int(
-        package_amount * REFERRAL_RATE
-    )
-
-    referrer = users.get(referrer_id)
-
-    if not referrer:
-        return
-
-    referrer["referral_profit"] = (
-        referrer.get("referral_profit", 0)
-        + referral_profit
-    )
-
-    # هذا الرصيد لاحقاً نربطه بالنظام المالي بعد إكماله.
-    referrer["balance"] = (
-        referrer.get("balance", 0)
-        + referral_profit
-    )
-
-    await context.bot.send_message(
-        chat_id=referrer_id,
-        text=f"""
-حصلت على ربح إحالة.
-
-باقة صديقك:
-{package_amount:,} د.ع.
-
-ربح الإحالة:
-{referral_profit:,} د.ع.
-
-النسبة:
-5%
+━━━━━━━━━━━━━━━━━━
 """
     )
 
 
 # ===== الدعم =====
 
-async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def support(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-    pass
+    set_state(
+        update.effective_user.id,
+        STATE_SUPPORT
+    )
+
+    await update.message.reply_text(
+        "اكتب رسالتك للدعم."
+    )
 
 
 # ===== لوحة الإدارة =====
@@ -292,9 +501,232 @@ async def admin_panel(
     if update.effective_user.id != ADMIN_ID:
         return
 
+    clear_state(
+        update.effective_user.id
+    )
+
     await update.message.reply_text(
-        "لوحة الإدارة.",
+        "لوحة الإدارة:",
         reply_markup=admin_keyboard()
+    )
+
+
+# ===== إدارة الباقات =====
+
+async def admin_packages(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "إضافة باقة",
+                callback_data=CB_PACKAGE_ADD
+            )
+        ]
+    ]
+
+    for package_id, package in packages_data.items():
+
+        keyboard.append([
+            InlineKeyboardButton(
+                f'تعديل {package["amount"]:,}',
+                callback_data=f"{CB_PACKAGE_EDIT}:{package_id}"
+            ),
+            InlineKeyboardButton(
+                "حذف",
+                callback_data=f"{CB_PACKAGE_DELETE}:{package_id}"
+            )
+        ])
+
+    await update.message.reply_text(
+        "إدارة الباقات:",
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+    )
+
+
+# ===== إضافة باقة =====
+
+async def add_package_start(
+    query,
+    context
+):
+
+    set_state(
+        query.from_user.id,
+        STATE_ADD_PACKAGE
+    )
+
+    await query.message.reply_text(
+        """
+اكتب بيانات الباقة بهذا الشكل:
+
+المبلغ,الربح_اليومي,الربح_الكلي,المدة
+
+مثال:
+
+100000,1000,5000,5
+"""
+    )
+
+
+# ===== محافظ الإيداع =====
+
+async def admin_deposit_wallets(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "إضافة محفظة",
+                callback_data="deposit_wallet_add"
+            )
+        ]
+    ]
+
+    for wallet_id, wallet in deposit_wallets.items():
+
+        keyboard.append([
+            InlineKeyboardButton(
+                f'{wallet["name"]}',
+                callback_data=f"deposit_wallet_delete:{wallet_id}"
+            )
+        ])
+
+    await update.message.reply_text(
+        "محافظ الإيداع:",
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+    )
+
+
+# ===== محافظ السحب =====
+
+async def admin_withdraw_wallets(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "إضافة محفظة",
+                callback_data="withdraw_wallet_add"
+            )
+        ]
+    ]
+
+    for wallet_id, wallet in withdraw_wallets.items():
+
+        keyboard.append([
+            InlineKeyboardButton(
+                f'{wallet["name"]}',
+                callback_data=f"withdraw_wallet_delete:{wallet_id}"
+            )
+        ])
+
+    await update.message.reply_text(
+        "محافظ السحب:",
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+    )
+
+
+# ===== إدارة الوكلاء =====
+
+async def admin_agents(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "إضافة وكيل",
+                callback_data="agent_add"
+            )
+        ]
+    ]
+
+    for agent_id, agent in agents.items():
+
+        keyboard.append([
+            InlineKeyboardButton(
+                agent["name"],
+                callback_data=f"agent_delete:{agent_id}"
+            )
+        ])
+
+    await update.message.reply_text(
+        "إدارة الوكلاء:",
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+    )
+
+
+# ===== الرسالة الجماعية =====
+
+async def broadcast_start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    set_state(
+        update.effective_user.id,
+        STATE_BROADCAST
+    )
+
+    await update.message.reply_text(
+        "اكتب الرسالة التي تريد إرسالها للمستخدمين."
+    )
+
+
+# ===== المستخدمين =====
+
+async def admin_users(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    await update.message.reply_text(
+        f"عدد المستخدمين المسجلين: {len(users)}"
+    )
+
+
+# ===== الإحصائيات =====
+
+async def admin_stats(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    await update.message.reply_text(
+        f"""
+الإحصائيات:
+
+عدد المستخدمين:
+{len(users)}
+
+عدد الباقات:
+{len(packages_data)}
+
+محافظ الإيداع:
+{len(deposit_wallets)}
+
+محافظ السحب:
+{len(withdraw_wallets)}
+
+الوكلاء:
+{len(agents)}
+"""
     )
 
 
@@ -310,20 +742,41 @@ async def admin_buttons(
 
     text = update.message.text
 
-    if text == "طلبات الإيداع":
-        pass
+    if text == "إدارة الباقات":
+        await admin_packages(update, context)
+
+    elif text == "محافظ الإيداع":
+        await admin_deposit_wallets(update, context)
+
+    elif text == "محافظ السحب":
+        await admin_withdraw_wallets(update, context)
+
+    elif text == "إدارة الوكلاء":
+        await admin_agents(update, context)
+
+    elif text == "طلبات الإيداع":
+        await update.message.reply_text(
+            "طلبات الإيداع."
+        )
 
     elif text == "طلبات السحب":
-        pass
+        await update.message.reply_text(
+            "طلبات السحب."
+        )
 
     elif text == "رسائل الدعم":
-        pass
+        await update.message.reply_text(
+            "رسائل الدعم."
+        )
 
     elif text == "المستخدمين":
-        pass
+        await admin_users(update, context)
+
+    elif text == "رسالة جماعية":
+        await broadcast_start(update, context)
 
     elif text == "الإحصائيات":
-        pass
+        await admin_stats(update, context)
 
     elif text == "رجوع":
         await start(update, context)
@@ -342,72 +795,294 @@ async def callback_handler(
 
     data = query.data
 
-    if data.startswith(DEPOSIT_APPROVE):
-        pass
+    if data == CB_PACKAGE_ADD:
 
-    elif data.startswith(DEPOSIT_REJECT):
-        pass
+        await add_package_start(
+            query,
+            context
+        )
 
-    elif data.startswith(WITHDRAW_APPROVE):
-        pass
+        return
 
-    elif data.startswith(WITHDRAW_REJECT):
-        pass
+    if data.startswith(
+        f"{CB_PACKAGE_DELETE}:"
+    ):
 
-    elif data.startswith(SUPPORT_REPLY):
-        pass
+        package_id = data.split(
+            ":",
+            1
+        )[1]
+
+        packages_data.pop(
+            package_id,
+            None
+        )
+
+        await query.message.reply_text(
+            "تم حذف الباقة."
+        )
+
+        return
+
+    if data.startswith("package_view:"):
+
+        package_id = data.split(
+            ":",
+            1
+        )[1]
+
+        await package_view(
+            query,
+            package_id
+        )
+
+        return
+
+    if data.startswith(
+        "deposit_wallet_delete:"
+    ):
+
+        wallet_id = data.split(
+            ":",
+            1
+        )[1]
+
+        deposit_wallets.pop(
+            wallet_id,
+            None
+        )
+
+        await query.message.reply_text(
+            "تم حذف محفظة الإيداع."
+        )
+
+        return
+
+    if data.startswith(
+        "withdraw_wallet_delete:"
+    ):
+
+        wallet_id = data.split(
+            ":",
+            1
+        )[1]
+
+        withdraw_wallets.pop(
+            wallet_id,
+            None
+        )
+
+        await query.message.reply_text(
+            "تم حذف محفظة السحب."
+        )
+
+        return
+
+    if data.startswith(
+        "agent_delete:"
+    ):
+
+        agent_id = data.split(
+            ":",
+            1
+        )[1]
+
+        agents.pop(
+            agent_id,
+            None
+        )
+
+        await query.message.reply_text(
+            "تم حذف الوكيل."
+        )
+
+        return
 
 
-# ===== معالج الرسائل =====
+# ===== استقبال البيانات =====
 
-async def message_handler(
+async def message_router(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    user_id = update.effective_user.id
     text = update.message.text
+
+    state = get_state(user_id)
+
+    # ===== حالات الإدارة =====
+
+    if (
+        user_id == ADMIN_ID
+        and state == STATE_ADD_PACKAGE
+    ):
+
+        parts = [
+            x.strip()
+            for x in text.split(",")
+        ]
+
+        if len(parts) != 4:
+            await update.message.reply_text(
+                "الصيغة غير صحيحة."
+            )
+            return
+
+        try:
+
+            amount = int(parts[0])
+            daily = int(parts[1])
+            total = int(parts[2])
+            days = int(parts[3])
+
+            package_id = str(amount)
+
+            packages_data[package_id] = {
+                "amount": amount,
+                "daily_profit": daily,
+                "total_profit": total,
+                "days": days,
+                "active": True
+            }
+
+            clear_state(user_id)
+
+            await update.message.reply_text(
+                "تمت إضافة الباقة."
+            )
+
+        except ValueError:
+
+            await update.message.reply_text(
+                "تأكد من كتابة الأرقام بشكل صحيح."
+            )
+
+        return
+
+    if (
+        user_id == ADMIN_ID
+        and state == STATE_BROADCAST
+    ):
+
+        sent = 0
+        failed = 0
+
+        for target_id in users:
+
+            try:
+
+                await context.bot.send_message(
+                    chat_id=target_id,
+                    text=text
+                )
+
+                sent += 1
+
+            except:
+
+                failed += 1
+
+        clear_state(user_id)
+
+        await update.message.reply_text(
+            f"""
+تم إرسال الرسالة الجماعية.
+
+تم الإرسال:
+{sent}
+
+فشل الإرسال:
+{failed}
+"""
+        )
+
+        return
+
+    # ===== أزرار الإدارة =====
+
+    if user_id == ADMIN_ID:
+
+        admin_texts = [
+            "إدارة الباقات",
+            "محافظ الإيداع",
+            "محافظ السحب",
+            "إدارة الوكلاء",
+            "طلبات الإيداع",
+            "طلبات السحب",
+            "رسائل الدعم",
+            "المستخدمين",
+            "رسالة جماعية",
+            "الإحصائيات",
+            "رجوع"
+        ]
+
+        if text in admin_texts:
+
+            await admin_buttons(
+                update,
+                context
+            )
+
+            return
+
+    # ===== أزرار المستخدم =====
 
     if text == "لوحة الإدارة":
 
-        await admin_panel(update, context)
-
-    elif text == "حسابي":
-
-        await account(update, context)
+        await admin_panel(
+            update,
+            context
+        )
 
     elif text == "الباقات":
 
-        await packages(update, context)
+        await packages(
+            update,
+            context
+        )
+
+    elif text == "حسابي":
+
+        await account(
+            update,
+            context
+        )
 
     elif text == "إيداع":
 
-        await deposit(update, context)
+        await deposit(
+            update,
+            context
+        )
 
     elif text == "سحب":
 
-        await withdraw(update, context)
+        await withdraw(
+            update,
+            context
+        )
 
     elif text == "الإحالة":
 
-        await referral(update, context)
+        await referral(
+            update,
+            context
+        )
 
     elif text == "حالة الباقة":
 
-        await package_status(update, context)
+        await package_status(
+            update,
+            context
+        )
 
     elif text == "الدعم":
 
-        await support(update, context)
-
-
-# ===== معالج الصور =====
-
-async def photo_handler(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-
-    pass
+        await support(
+            update,
+            context
+        )
 
 
 # ===== تشغيل البوت =====
@@ -415,28 +1090,23 @@ async def photo_handler(
 app = Application.builder().token(TOKEN).build()
 
 app.add_handler(
-    CommandHandler("start", start)
+    CommandHandler(
+        "start",
+        start
+    )
 )
 
 app.add_handler(
-    CallbackQueryHandler(callback_handler)
-)
-
-app.add_handler(
-    MessageHandler(
-        filters.PHOTO,
-        photo_handler
+    CallbackQueryHandler(
+        callback_handler
     )
 )
 
 app.add_handler(
     MessageHandler(
         filters.TEXT & ~filters.COMMAND,
-        message_handler
+        message_router
     )
 )
-
-
-# ===== نهاية الكود =====
 
 app.run_polling()
