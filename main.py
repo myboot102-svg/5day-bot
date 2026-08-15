@@ -68,7 +68,57 @@ CB_SUPPORT_REPLY = "support_reply"
 
 users = {}
 
-packages_data = {}
+packages_data = {
+    "10000": {"amount": 10000, "daily_profit": 100, "total_profit": 500, "days": 5, "active": True},
+    "20000": {"amount": 20000, "daily_profit": 200, "total_profit": 1000, "days": 5, "active": True},
+    "30000": {"amount": 30000, "daily_profit": 300, "total_profit": 1500, "days": 5, "active": True},
+    "40000": {"amount": 40000, "daily_profit": 400, "total_profit": 2000, "days": 5, "active": True},
+    "50000": {"amount": 50000, "daily_profit": 500, "total_profit": 2500, "days": 5, "active": True},
+    "60000": {"amount": 60000, "daily_profit": 600, "total_profit": 3000, "days": 5, "active": True},
+    "70000": {"amount": 70000, "daily_profit": 700, "total_profit": 3500, "days": 5, "active": True},
+    "80000": {"amount": 80000, "daily_profit": 800, "total_profit": 4000, "days": 5, "active": True},
+    "90000": {"amount": 90000, "daily_profit": 900, "total_profit": 4500, "days": 5, "active": True},
+    "100000": {"amount": 100000, "daily_profit": 1000, "total_profit": 5000, "days": 5, "active": True},
+
+    "200000": {"amount": 200000, "daily_profit": 2000, "total_profit": 10000, "days": 5, "active": True},
+    "300000": {"amount": 300000, "daily_profit": 3000, "total_profit": 15000, "days": 5, "active": True},
+    "400000": {"amount": 400000, "daily_profit": 4000, "total_profit": 20000, "days": 5, "active": True},
+    "500000": {"amount": 500000, "daily_profit": 5000, "total_profit": 25000, "days": 5, "active": True},
+    "600000": {"amount": 600000, "daily_profit": 6000, "total_profit": 30000, "days": 5, "active": True},
+    "700000": {"amount": 700000, "daily_profit": 7000, "total_profit": 35000, "days": 5, "active": True},
+    "800000": {"amount": 800000, "daily_profit": 8000, "total_profit": 40000, "days": 5, "active": True},
+    "900000": {"amount": 900000, "daily_profit": 9000, "total_profit": 45000, "days": 5, "active": True},
+
+    "1000000": {"amount": 1000000, "daily_profit": 10000, "total_profit": 50000, "days": 5, "active": True},
+    "1500000": {"amount": 1500000, "daily_profit": 15000, "total_profit": 75000, "days": 5, "active": True},
+    "2000000": {"amount": 2000000, "daily_profit": 20000, "total_profit": 100000, "days": 5, "active": True},
+    "2500000": {"amount": 2500000, "daily_profit": 25000, "total_profit": 125000, "days": 5, "active": True},
+    "3000000": {"amount": 3000000, "daily_profit": 30000, "total_profit": 150000, "days": 5, "active": True},
+    "3500000": {"amount": 3500000, "daily_profit": 35000, "total_profit": 175000, "days": 5, "active": True},
+    "4000000": {"amount": 4000000, "daily_profit": 40000, "total_profit": 200000, "days": 5, "active": True},
+    "4500000": {"amount": 4500000, "daily_profit": 45000, "total_profit": 225000, "days": 5, "active": True},
+    "5000000": {"amount": 5000000, "daily_profit": 50000, "total_profit": 250000, "days": 5, "active": True},
+    "5500000": {"amount": 5500000, "daily_profit": 55000, "total_profit": 275000, "days": 5, "active": True},
+    "6000000": {"amount": 6000000, "daily_profit": 60000, "total_profit": 300000, "days": 5, "active": True},
+    "6500000": {"amount": 6500000, "daily_profit": 65000, "total_profit": 325000, "days": 5, "active": True},
+    "7000000": {"amount": 7000000, "daily_profit": 70000, "total_profit": 350000, "days": 5, "active": True},
+    "7500000": {"amount": 7500000, "daily_profit": 75000, "total_profit": 375000, "days": 5, "active": True},
+    "8000000": {"amount": 8000000, "daily_profit": 80000, "total_profit": 400000, "days": 5, "active": True},
+    "8500000": {"amount": 8500000, "daily_profit": 85000, "total_profit": 425000, "days": 5, "active": True},
+    "9000000": {"amount": 9000000, "daily_profit": 90000, "total_profit": 450000, "days": 5, "active": True},
+    "9500000": {"amount": 9500000, "daily_profit": 95000, "total_profit": 475000, "days": 5, "active": True},
+    "10000000": {"amount": 10000000, "daily_profit": 100000, "total_profit": 500000, "days": 5, "active": True},
+    "10500000": {"amount": 10500000, "daily_profit": 105000, "total_profit": 525000, "days": 5, "active": True},
+    "11000000": {"amount": 11000000, "daily_profit": 110000, "total_profit": 550000, "days": 5, "active": True},
+    "11500000": {"amount": 11500000, "daily_profit": 115000, "total_profit": 575000, "days": 5, "active": True},
+    "12000000": {"amount": 12000000, "daily_profit": 120000, "total_profit": 600000, "days": 5, "active": True},
+    "12500000": {"amount": 12500000, "daily_profit": 125000, "total_profit": 625000, "days": 5, "active": True},
+    "13000000": {"amount": 13000000, "daily_profit": 130000, "total_profit": 650000, "days": 5, "active": True},
+    "13500000": {"amount": 13500000, "daily_profit": 135000, "total_profit": 675000, "days": 5, "active": True},
+    "14000000": {"amount": 14000000, "daily_profit": 140000, "total_profit": 700000, "days": 5, "active": True},
+    "14500000": {"amount": 14500000, "daily_profit": 145000, "total_profit": 725000, "days": 5, "active": True},
+    "15000000": {"amount": 15000000, "daily_profit": 150000, "total_profit": 750000, "days": 5, "active": True}
+}
 
 deposit_wallets = {}
 
