@@ -54,7 +54,7 @@ MAIN_MENU = [
     ["حسابي", "الباقات"],
     ["إيداع", "سحب"],
     ["الإحالة", "الدعم"],
-    ["الشروط والأحكام"],
+    ["حالة الباقة"],
 ]
 
 
@@ -337,11 +337,48 @@ async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ============================================================
-# الشروط والأحكام
+# حالة الباقة
 # ============================================================
 
-async def terms(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass
+async def package_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_data = context.user_data
+    active_package = user_data.get("active_package")
+
+    if not active_package:
+        await update.message.reply_text(
+            """━━━━━━━━━━━━━━━
+        حالة الباقة
+━━━━━━━━━━━━━━━
+
+• الحالة: منتهية.
+• لا توجد باقة نشطة حالياً.
+• رأس المال المتجمد: 0 د.ع.
+• الربح اليومي: 0 د.ع.
+• الأيام المتبقية: 0.
+━━━━━━━━━━━━━━━"""
+        )
+        return
+
+    amount = active_package.get("amount", 0)
+    daily_profit = active_package.get("daily_profit", 0)
+    total_profit = active_package.get("total_profit", 0)
+    remaining_days = active_package.get("remaining_days", 0)
+
+    await update.message.reply_text(
+        f"""━━━━━━━━━━━━━━━
+        حالة الباقة
+━━━━━━━━━━━━━━━
+
+• الحالة: نشطة.
+• قيمة الباقة: {amount:,} د.ع.
+• رأس المال المتجمد: {amount:,} د.ع.
+• الربح اليومي: {daily_profit:,} د.ع.
+• إجمالي ربح الدورة: {total_profit:,} د.ع.
+• الأيام المتبقية: {remaining_days} يوم.
+
+━━━━━━━━━━━━━━━"""
+    )
 
 
 # ============================================================
@@ -445,6 +482,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
+    elif text == "حالة الباقة":
+       await package_status(update, context)
+
+    
     # ========================================================
     # رجوع للقائمة الرئيسية
     # ========================================================
