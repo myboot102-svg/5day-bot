@@ -78,7 +78,34 @@ DIRECT_DEPOSIT_MENU = [
     ["رجوع للقائمة الرئيسية"],
 ]
 
+# ============================================================
+# الباقات
+# ============================================================
 
+PACKAGES = {}
+
+# من 10,000 إلى 100,000 — كل 10,000
+for amount in range(10000, 100001, 10000):
+    PACKAGES[amount] = {
+        "name": f"باقة {amount:,}",
+        "amount": amount,
+    }
+
+
+# من 100,000 إلى 1,000,000 — كل 100,000
+for amount in range(100000, 1000001, 100000):
+    PACKAGES[amount] = {
+        "name": f"باقة {amount:,}",
+        "amount": amount,
+    }
+
+
+# من 1,000,000 إلى 15,000,000 — كل 500,000
+for amount in range(1000000, 15000001, 500000):
+    PACKAGES[amount] = {
+        "name": f"باقة {amount:,}",
+        "amount": amount,
+    }
 # ============================================================
 # قائمة الإدارة
 # ============================================================
@@ -123,10 +150,64 @@ async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============================================================
 # الباقات
 # ============================================================
-
 async def packages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass
 
+    if not PACKAGES:
+        await update.message.reply_text(
+            "لا توجد باقات متاحة حالياً."
+        )
+        return
+
+    buttons = []
+
+    for package in sorted(PACKAGES.values(), key=lambda x: x["amount"]):
+        buttons.append([
+            package["name"]
+        ])
+
+    buttons.append(["رجوع للقائمة الرئيسية"])
+
+    await update.message.reply_text(
+        "الباقات المتاحة:",
+        reply_markup=ReplyKeyboardMarkup(
+            buttons,
+            resize_keyboard=True
+        )
+    )
+
+
+# ============================================================
+# تفاصيل الباقة
+# ============================================================
+
+async def package_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    text = update.message.text
+
+    selected_package = None
+
+    for package in PACKAGES.values():
+        if package["name"] == text:
+            selected_package = package
+            break
+
+    if not selected_package:
+        await update.message.reply_text(
+            "الباقة غير موجودة."
+        )
+        return
+
+    amount = selected_package["amount"]
+
+    await update.message.reply_text(
+        f"""تفاصيل الباقة.
+
+اسم الباقة: {selected_package["name"]}
+المبلغ: {amount:,} دينار.
+مدة الدورة: 5 أيام.
+
+يرجى قراءة الشروط والأحكام قبل الاشتراك."""
+    )
 
 # ============================================================
 # الإيداع
@@ -339,6 +420,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text == "الباقات":
         await packages(update, context)
+
+    elif text.startswith("باقة "):
+        await package_details(update, context)
 
     elif text == "سحب":
         await withdraw(update, context)
