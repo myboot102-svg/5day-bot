@@ -309,7 +309,18 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============================================================
 
 async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass
+
+    context.user_data["support_mode"] = True
+
+    await update.message.reply_text(
+        """━━━━━━━━━━━━━━━
+        الدعم الفني
+━━━━━━━━━━━━━━━
+
+اكتب رسالتك أو أرسل صورة للمشكلة.
+
+━━━━━━━━━━━━━━━"""
+    )
 
 
 # ============================================================
