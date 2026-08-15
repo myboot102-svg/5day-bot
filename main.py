@@ -1,4 +1,7 @@
 # -------- الاستيرادات --------
+
+import os
+
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
@@ -14,7 +17,7 @@ from telegram.ext import (
 )
 
 # -------- المتغيرات --------
-TOKEN = "8793157657:AAFK579AfPI5HviOU3u111R074x4l_ujbJc"
+TOKEN = os.getenv("TOKEN")
 ADMIN_ID = 8460661282
 
 users = {}
