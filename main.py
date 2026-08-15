@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 
 # -------- المتغيرات --------
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = "8793157657:AAFK579AfPI5HviOU3u111R074x4l_ujbJc"
 ADMIN_ID = 8460661282
 
 users = {}
