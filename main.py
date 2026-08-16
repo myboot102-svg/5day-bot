@@ -315,17 +315,16 @@ async def account(
     )
 
 
-# ===== قسم الباقات =====
 
 # =========================
-# الباقات - نسخة تجريبية
+# إعدادات الباقات
 # =========================
 
 PACKAGE_DAYS = 5
 
 def packages_keyboard():
-    amounts = list(range(10000, 1000001, 10000))
-    amounts += list(range(1500000, 15000001, 500000))
+    amounts = list(range(10_000, 1_000_001, 10_000))
+    amounts += list(range(1_500_000, 15_000_001, 500_000))
 
     keyboard = []
 
@@ -333,7 +332,7 @@ def packages_keyboard():
         row = []
 
         for amount in amounts[i:i + 2]:
-            row.append(f"{amount:,} نقطة")
+            row.append(f"{amount:,} د.ع")
 
         keyboard.append(row)
 
@@ -345,7 +344,7 @@ def packages_keyboard():
     )
 
 
-def package_details_keyboard():
+def package_confirm_keyboard():
     return ReplyKeyboardMarkup(
         [
             ["اشتراك"],
@@ -355,40 +354,33 @@ def package_details_keyboard():
     )
 
 
-async def packages(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def packages(update, context):
     user_id = update.effective_user.id
     user = get_user(user_id)
 
-    active_package = user.get("active_package")
-
-    if active_package:
+    if user.get("active_package"):
         await update.message.reply_text(
-            "عندك باقة فعّالة حالياً.\n"
-            "لا يمكن الاشتراك بباقة ثانية إلى أن تنتهي الباقة الحالية."
+            "لديك باقة فعّالة حالياً، ولا يمكنك الاشتراك بباقة أخرى حتى تنتهي."
         )
         return
 
+    context.user_data.pop("selected_package", None)
+
     await update.message.reply_text(
-        "اختاري قيمة الباقة من القائمة:",
+        "اختر قيمة الباقة من القائمة:",
         reply_markup=packages_keyboard()
     )
 
 
-async def package_details(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def package_details(update, context):
     text = update.message.text.strip()
 
-    if not text.endswith("نقطة"):
+    if not text.endswith("د.ع"):
         return
 
     try:
         amount = int(
-            text.replace("نقطة", "")
+            text.replace("د.ع", "")
                 .replace(",", "")
                 .strip()
         )
@@ -400,38 +392,29 @@ async def package_details(
 
     if user.get("active_package"):
         await update.message.reply_text(
-            "عندك باقة فعّالة حالياً.\n"
-            "انتظري انتهاء الباقة حتى تكدرين تشتركين بباقة جديدة."
+            "لديك باقة فعّالة حالياً، ولا يمكنك الاشتراك بباقة أخرى حتى تنتهي."
         )
         return
-
-    daily_profit = (amount // 10000) * 100
-    total_profit = daily_profit * PACKAGE_DAYS
 
     context.user_data["selected_package"] = amount
 
     await update.message.reply_text(
         f"""
 ━━━━━━━━━━━━━━━
-تفاصيل الباقة
+        تفاصيل الباقة
 ━━━━━━━━━━━━━━━
 
-المبلغ: {amount:,} نقطة
+قيمة الباقة: {amount:,} د.ع
 المدة: {PACKAGE_DAYS} أيام
-العائد اليومي التجريبي: {daily_profit:,} نقطة
-إجمالي العائد التجريبي: {total_profit:,} نقطة
 
-اضغطي اشتراك للتأكيد.
+اضغط «اشتراك» للمتابعة.
 ━━━━━━━━━━━━━━━
 """,
-        reply_markup=package_details_keyboard()
+        reply_markup=package_confirm_keyboard()
     )
 
 
-async def package_confirm(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def package_confirm(update, context):
     user_id = update.effective_user.id
     user = get_user(user_id)
 
@@ -439,13 +422,13 @@ async def package_confirm(
 
     if not amount:
         await update.message.reply_text(
-            "اختاري الباقة أولاً."
+            "يرجى اختيار الباقة أولاً."
         )
         return
 
     if user.get("active_package"):
         await update.message.reply_text(
-            "عندك باقة فعّالة حالياً."
+            "لديك باقة فعّالة حالياً."
         )
         return
 
@@ -453,47 +436,41 @@ async def package_confirm(
 
     if balance < amount:
         await update.message.reply_text(
-            f"رصيدك غير كافي.\n"
-            f"قيمة الباقة: {amount:,} نقطة\n"
-            f"رصيدك الحالي: {balance:,} نقطة"
+            f"""
+رصيدك غير كافٍ.
+
+قيمة الباقة: {amount:,} د.ع
+رصيدك الحالي: {balance:,} د.ع
+"""
         )
         return
 
-    # خصم النقاط التجريبية
+    # خصم الرصيد الداخلي
     user["balance"] -= amount
-
-    daily_profit = (amount // 10000) * 100
-    total_profit = daily_profit * PACKAGE_DAYS
 
     # تفعيل الباقة
     user["active_package"] = {
         "amount": amount,
-        "daily_profit": daily_profit,
-        "total_profit": total_profit,
-        "days": PACKAGE_DAYS,
         "started_at": datetime.now(),
-        "end_at": datetime.now() + timedelta(days=PACKAGE_DAYS)
+        "days": PACKAGE_DAYS
     }
 
-    # عدد الاشتراكات السابقة + الحالي
+    # زيادة عدد الاشتراكات السابقة
     user["packages_count"] = user.get("packages_count", 0) + 1
 
-    # نحفظ آخر اختيار مؤقتاً
     context.user_data.pop("selected_package", None)
 
     await update.message.reply_text(
         f"""
 تم تفعيل الباقة بنجاح.
 
-قيمة الباقة: {amount:,} نقطة
+قيمة الباقة: {amount:,} د.ع
 المدة: {PACKAGE_DAYS} أيام
-العائد اليومي التجريبي: {daily_profit:,} نقطة
-إجمالي العائد التجريبي: {total_profit:,} نقطة
-
-رصيدك الحالي: {user["balance"]:,} نقطة
+رصيدك الحالي: {user["balance"]:,} د.ع
 """,
         reply_markup=user_keyboard(user_id)
     )
+
 
 # ===== حالة الباقة =====
 
@@ -1051,27 +1028,21 @@ async def message_router(
     user_id = update.effective_user.id
     text = update.message.text
 
-    # الصقي الكود هنا
+    #------- للباقات---------
     if text == "الباقات":
         await packages(update, context)
         return
 
-    if text in [
-        "10,000 د.ع", "20,000 د.ع",
-        "30,000 د.ع", "40,000 د.ع",
-        "50,000 د.ع", "60,000 د.ع",
-        "70,000 د.ع", "80,000 د.ع",
-        "90,000 د.ع", "100,000 د.ع",
-        "200,000 د.ع", "300,000 د.ع",
-        "400,000 د.ع", "500,000 د.ع",
-        "1,000,000 د.ع", "5,000,000 د.ع",
-        "10,000,000 د.ع", "15,000,000 د.ع"
-    ]:
+    if text.endswith("د.ع"):
         await package_details(update, context)
         return
 
-    if text in ["اشتراك", "العودة للباقات"]:
+    if text == "اشتراك":
         await package_confirm(update, context)
+        return
+
+    if text == "العودة للباقات":
+        await packages(update, context)
         return
 
 
