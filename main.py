@@ -599,12 +599,6 @@ async def package_confirm(update, context):
         "profit_paid": 0,
         "status": "active"
     }
-
-     await give_first_package_referral(
-         user_id,
-         amount,
-         context
-     )
     
     context.user_data.pop("selected_package", None)
 
@@ -612,6 +606,11 @@ async def package_confirm(update, context):
     f"""تم تفعيل الباقة بنجاح."""
     )
 
+     await give_first_package_referral(
+         user_id,
+         amount,
+         context
+     )
 
 
 
