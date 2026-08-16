@@ -343,7 +343,7 @@ def packages_keyboard():
 
         keyboard.append(row)
 
-    keyboard.append(["العودة للقائمة الرئيسية"])
+    keyboard.append(["رجوع"])
 
     return ReplyKeyboardMarkup(
         keyboard,
