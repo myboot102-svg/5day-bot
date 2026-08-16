@@ -111,7 +111,9 @@ def get_user(user_id):
 
             "deposit_count": 0,
             "profit_withdrawals": 0,
-            "blocked": False
+            "blocked": False,
+            "referral_join_reward_received": False,
+            "referral_commission_paid": False,
         }
 
     return users[user_id]
