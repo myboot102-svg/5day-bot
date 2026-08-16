@@ -359,7 +359,8 @@ def package_confirm_keyboard():
     return ReplyKeyboardMarkup(
         [
             ["اشتراك"],
-            ["العودة للباقات"]
+            ["العودة للباقات"],
+            ["العودة للقائمة الرئيسية"]
         ],
         resize_keyboard=True
     )
@@ -1607,6 +1608,10 @@ async def message_router(
 
     if text == "اشتراك":
         await package_confirm(update, context)
+        return
+
+    if text == "العودة للقائمة الرئيسية":
+        await start(update, context)
         return
 
     if text == "العودة للباقات":
