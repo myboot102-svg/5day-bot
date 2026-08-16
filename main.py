@@ -93,15 +93,17 @@ def get_user(user_id):
         users[user_id] = {
             "name": "",
             "username": "",
-            "referrer_id": None,
-            "referrals": 0,
-            "referral_profit": 0,
+            "join_date": None,
 
             "balance": 0,
-            "packages_count": 0,
+            
+           "packages_count": 0,
             "total_capital": 0,
             "total_profit": 0,
-            "total_days": 0
+
+            "referrer_id": None,
+            "referrals": 0,
+            "referral_profit": 0
         }
 
     return users[user_id]
