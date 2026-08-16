@@ -107,7 +107,11 @@ def get_user(user_id):
 
             "referrer_id": None,
             "referrals": 0,
-            "referral_profit": 0
+            "referral_profit": 0,
+
+            "deposit_count": 0,
+            "profit_withdrawals": 0,
+            "blocked": False
         }
 
     return users[user_id]
@@ -838,15 +842,467 @@ async def broadcast_start(
     )
 
 
-# ===== المستخدمين =====
+# =========================
+# إدارة المستخدمين - الأدمن
+# =========================
 
-async def admin_users(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def admin_users(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    if not users:
+        await update.message.reply_text(
+            "لا يوجد مستخدمون حالياً."
+        )
+        return
+
+    keyboard = []
+
+    for user_id, user in users.items():
+        name = user.get("name") or "بدون اسم"
+        username = user.get("username") or "بدون يوزر"
+
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{name} | @{username}",
+                callback_data=f"user_view:{user_id}"
+            )
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            "رجوع",
+            callback_data="admin_back"
+        )
+    ])
 
     await update.message.reply_text(
-        f"عدد المستخدمين المسجلين: {len(users)}"
+        "اختر المستخدم:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+# =========================
+# تفاصيل المستخدم
+# =========================
+
+async def admin_user_view(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id != ADMIN_ID:
+        return
+
+    try:
+        user_id = int(query.data.split(":")[1])
+    except (ValueError, IndexError):
+        return
+
+    user = users.get(user_id)
+
+    if not user:
+        await query.edit_message_text(
+            "المستخدم غير موجود."
+        )
+        return
+
+    name = user.get("name") or "بدون اسم"
+    username = user.get("username") or "بدون يوزر"
+
+    balance = user.get("balance", 0)
+    packages_count = user.get("packages_count", 0)
+    deposit_count = user.get("deposit_count", 0)
+    total_capital = user.get("total_capital", 0)
+    total_profit = user.get("total_profit", 0)
+    profit_withdrawals = user.get("profit_withdrawals", 0)
+    referrals = user.get("referrals", 0)
+    referral_profit = user.get("referral_profit", 0)
+
+    blocked = user.get("blocked", False)
+
+    active_package = user.get("active_package")
+
+    if active_package:
+        package_amount = active_package.get("amount", 0)
+        daily_profit = active_package.get("daily_profit", 0)
+        status = active_package.get("status", "active")
+
+        package_text = (
+            f"المبلغ: {package_amount:,} د.ع\n"
+            f"الربح اليومي: {daily_profit:,} د.ع\n"
+            f"الحالة: {status}"
+        )
+    else:
+        package_text = "لا توجد باقة فعّالة."
+
+    status_text = "محظور" if blocked else "نشط"
+
+    text = f"""
+━━━━━━━━━━━━━━━
+       بيانات المستخدم
+━━━━━━━━━━━━━━━
+
+• الاسم: {name}
+• اليوزر: @{username}
+• ID: {user_id}
+
+• الرصيد: {balance:,} د.ع
+
+• الباقة الحالية:
+{package_text}
+
+• مرات تفعيل الباقات: {packages_count}
+• مرات الإيداع: {deposit_count}
+
+• رأس المال:
+{total_capital:,} د.ع
+
+• الأرباح بدون رأس المال:
+{total_profit:,} د.ع
+
+• مرات استلام الأرباح:
+{profit_withdrawals}
+
+• الإجمالي مع رأس المال:
+{total_capital + total_profit:,} د.ع
+
+• عدد الإحالات:
+{referrals}
+
+• أرباح الإحالات:
+{referral_profit:,} د.ع
+
+• الحالة: {status_text}
+
+━━━━━━━━━━━━━━━
+"""
+
+    if blocked:
+        block_button = InlineKeyboardButton(
+            "فك الحظر",
+            callback_data=f"user_unblock:{user_id}"
+        )
+    else:
+        block_button = InlineKeyboardButton(
+            "حظر المستخدم",
+            callback_data=f"user_block:{user_id}"
+        )
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "إضافة رصيد نقاط",
+                callback_data=f"add_points:{user_id}"
+            ),
+            InlineKeyboardButton(
+                "خصم رصيد نقاط",
+                callback_data=f"sub_points:{user_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "تفاصيل الباقة",
+                callback_data=f"user_package:{user_id}"
+            )
+        ],
+        [
+            block_button
+        ],
+        [
+            InlineKeyboardButton(
+                "رجوع للمستخدمين",
+                callback_data="admin_users_back"
+            )
+        ]
+    ]
+
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+# =========================
+# طلب مبلغ إضافة الرصيد
+# =========================
+
+async def admin_add_points(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id != ADMIN_ID:
+        return
+
+    user_id = int(query.data.split(":")[1])
+
+    context.user_data["balance_action"] = "add"
+    context.user_data["balance_target"] = user_id
+
+    await query.message.reply_text(
+        "اكتب مقدار رصيد النقاط الذي تريد إضافته للمستخدم:"
+    )
+
+
+# =========================
+# طلب مبلغ خصم الرصيد
+# =========================
+
+async def admin_sub_points(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id != ADMIN_ID:
+        return
+
+    user_id = int(query.data.split(":")[1])
+
+    context.user_data["balance_action"] = "sub"
+    context.user_data["balance_target"] = user_id
+
+    await query.message.reply_text(
+        "اكتب مقدار رصيد النقاط الذي تريد خصمه من المستخدم:"
+    )
+
+
+# =========================
+# تنفيذ إضافة / خصم الرصيد
+# =========================
+
+async def admin_balance_input(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        return False
+
+    action = context.user_data.get("balance_action")
+
+    if not action:
+        return False
+
+    user_id = context.user_data.get("balance_target")
+
+    if not user_id:
+        context.user_data.pop("balance_action", None)
+        context.user_data.pop("balance_target", None)
+        return False
+
+    user = users.get(user_id)
+
+    if not user:
+        await update.message.reply_text(
+            "المستخدم غير موجود."
+        )
+
+        context.user_data.pop("balance_action", None)
+        context.user_data.pop("balance_target", None)
+
+        return True
+
+    text = update.message.text.strip().replace(",", "")
+
+    try:
+        amount = int(text)
+    except ValueError:
+        await update.message.reply_text(
+            "اكتب رقماً صحيحاً فقط."
+        )
+        return True
+
+    if amount <= 0:
+        await update.message.reply_text(
+            "المبلغ لازم يكون أكبر من صفر."
+        )
+        return True
+
+    current_balance = user.get("balance", 0)
+
+    if action == "add":
+
+        user["balance"] = current_balance + amount
+
+        await update.message.reply_text(
+            f"تمت إضافة {amount:,} د.ع إلى رصيد المستخدم.\n"
+            f"الرصيد الجديد: {user['balance']:,} د.ع"
+        )
+
+    elif action == "sub":
+
+        if amount > current_balance:
+            await update.message.reply_text(
+                f"رصيد المستخدم غير كافٍ للخصم.\n"
+                f"الرصيد الحالي: {current_balance:,} د.ع"
+            )
+            return True
+
+        user["balance"] = current_balance - amount
+
+        await update.message.reply_text(
+            f"تم خصم {amount:,} د.ع من رصيد المستخدم.\n"
+            f"الرصيد الجديد: {user['balance']:,} د.ع"
+        )
+
+    context.user_data.pop("balance_action", None)
+    context.user_data.pop("balance_target", None)
+
+    return True
+
+
+# =========================
+# تفاصيل الباقة
+# =========================
+
+async def admin_user_package(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id != ADMIN_ID:
+        return
+
+    try:
+        user_id = int(query.data.split(":")[1])
+    except (ValueError, IndexError):
+        return
+
+    user = users.get(user_id)
+
+    if not user:
+        return
+
+    active_package = user.get("active_package")
+
+    if not active_package:
+        await query.edit_message_text(
+            "لا توجد باقة فعّالة لهذا المستخدم.",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "رجوع",
+                        callback_data=f"user_view:{user_id}"
+                    )
+                ]
+            ])
+        )
+        return
+
+    amount = active_package.get("amount", 0)
+    daily_profit = active_package.get("daily_profit", 0)
+    total_profit = active_package.get("total_profit", 0)
+    status = active_package.get("status", "active")
+
+    started_at = active_package.get("started_at", "غير محدد")
+    ends_at = active_package.get("ends_at", "غير محدد")
+
+    text = f"""
+━━━━━━━━━━━━━━━
+       تفاصيل الباقة
+━━━━━━━━━━━━━━━
+
+• المبلغ: {amount:,} د.ع
+• الربح اليومي: {daily_profit:,} د.ع
+• إجمالي الربح: {total_profit:,} د.ع
+• الحالة: {status}
+
+• تاريخ التفعيل:
+{started_at}
+
+• تاريخ الانتهاء:
+{ends_at}
+
+━━━━━━━━━━━━━━━
+"""
+
+    keyboard = [[
+        InlineKeyboardButton(
+            "رجوع",
+            callback_data=f"user_view:{user_id}"
+        )
+    ]]
+
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+# =========================
+# حظر المستخدم
+# =========================
+
+async def admin_user_block(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id != ADMIN_ID:
+        return
+
+    user_id = int(query.data.split(":")[1])
+
+    user = users.get(user_id)
+
+    if not user:
+        return
+
+    user["blocked"] = True
+
+    await admin_user_view(update, context)
+
+
+# =========================
+# فك الحظر
+# =========================
+
+async def admin_user_unblock(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id != ADMIN_ID:
+        return
+
+    user_id = int(query.data.split(":")[1])
+
+    user = users.get(user_id)
+
+    if not user:
+        return
+
+    user["blocked"] = False
+
+    await admin_user_view(update, context)
+
+
+# =========================
+# الرجوع لقائمة المستخدمين
+# =========================
+
+async def admin_users_back(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id != ADMIN_ID:
+        return
+
+    keyboard = []
+
+    for user_id, user in users.items():
+
+        name = user.get("name") or "بدون اسم"
+        username = user.get("username") or "بدون يوزر"
+
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{name} | @{username}",
+                callback_data=f"user_view:{user_id}"
+            )
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            "رجوع",
+            callback_data="admin_back"
+        )
+    ])
+
+    await query.edit_message_text(
+        "اختر المستخدم:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -1058,6 +1514,10 @@ async def message_router(
     user_id = update.effective_user.id
     text = update.message.text
 
+
+    if await admin_balance_input(update, context):
+        return
+    
     # =========================
 # ربط قسم الباقات
 # =========================
