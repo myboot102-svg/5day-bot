@@ -257,31 +257,47 @@ async def account(
     user_id = update.effective_user.id
     user = get_user(user_id)
 
+    # الرصيد الحالي
     balance = user.get("balance", 0)
+
+    # عدد الباقات المشترك بها عبر الوقت
     packages_count = user.get("packages_count", 0)
+
+    # إجمالي الإيداعات / رأس المال
     total_capital = user.get("total_capital", 0)
+
+    # إجمالي الأرباح من الباقات
     total_profit = user.get("total_profit", 0)
 
+    # إجمالي رأس المال + الأرباح
+    total_all = total_capital + total_profit
+
+    # الإحالات
     referrals = user.get("referrals", 0)
     referral_profit = user.get("referral_profit", 0)
 
-    total_days = user.get("total_days", 0)
+    # عدد الأيام من أول دخول للبوت
+    join_date = user.get("join_date")
 
-    total = total_capital + total_profit
+    if join_date:
+        days = (datetime.now() - join_date).days + 1
+    else:
+        days = 1
 
     await update.message.reply_text(
-        f"""━━━━━━━━━━━━━━━
-              حسابي
+        f"""
+━━━━━━━━━━━━━━━
+        حسابي
 ━━━━━━━━━━━━━━━
 
 • الرصيد: {balance:,} د.ع
 • عدد الباقات: {packages_count}
 • إجمالي رأس المال: {total_capital:,} د.ع
 • إجمالي الأرباح: {total_profit:,} د.ع
-• الإجمالي الكلي: {total:,} د.ع
+• الإجمالي الكلي: {total_all:,} د.ع
 
 ━━━━━━━━━━━━━━━
-              الإحالات
+        الإحالات
 ━━━━━━━━━━━━━━━
 
 • عدد الإحالات: {referrals}
@@ -289,9 +305,10 @@ async def account(
 
 ━━━━━━━━━━━━━━━
 
-• عدد الأيام: {total_days}
+• عدد الأيام: {days}
 
-━━━━━━━━━━━━━━━"""
+━━━━━━━━━━━━━━━
+"""
     )
 
 
