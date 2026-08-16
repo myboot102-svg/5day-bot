@@ -206,7 +206,7 @@ async def start(
     user_id = update.effective_user.id
     
 
-        referrer_id = None
+    referrer_id = None
 
     if context.args:
         argument = context.args[0]
