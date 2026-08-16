@@ -206,37 +206,37 @@ async def start(
     user_id = update.effective_user.id
     
 
-    referrer_id = None
+        referrer_id = None
 
-if context.args:
-    argument = context.args[0]
+    if context.args:
+        argument = context.args[0]
 
-    if argument.startswith("ref_"):
-        try:
-            referrer_id = int(
-                argument.replace("ref_", "", 1)
-            )
-        except ValueError:
-            referrer_id = None
-
-if referrer_id:
-    joined_referrer = process_referral(
-        user_id,
-        referrer_id
-    )
-
-    if joined_referrer:
-        try:
-            await context.bot.send_message(
-                chat_id=joined_referrer,
-                text=(
-                    "تم انضمام صديقك عن طريق الدعوة "
-                    "التي شاركتها، وتم تحصيل "
-                    "5 د.ع."
+        if argument.startswith("ref_"):
+            try:
+                referrer_id = int(
+                    argument.replace("ref_", "", 1)
                 )
-            )
-        except Exception:
-            pass
+            except ValueError:
+                referrer_id = None
+
+    if referrer_id:
+        joined_referrer = process_referral(
+            user_id,
+            referrer_id
+        )
+
+        if joined_referrer:
+            try:
+                await context.bot.send_message(
+                    chat_id=joined_referrer,
+                    text=(
+                        "تم انضمام صديقك عن طريق الدعوة "
+                        "التي شاركتها، وتم تحصيل "
+                        "5 د.ع."
+                    )
+                )
+            except Exception:
+                pass
 
     
     user = get_user(user_id)
