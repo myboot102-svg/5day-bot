@@ -19,6 +19,7 @@ from telegram.ext import (
 )
 
 from datetime import datetime
+from datetime import datetime, timedelta
 
 # ===== الإعدادات الأساسية =====
 
@@ -101,6 +102,8 @@ def get_user(user_id):
             "packages_count": 0,
             "total_capital": 0,
             "total_profit": 0,
+
+            "active_package": None,
 
             "referrer_id": None,
             "referrals": 0,
@@ -314,22 +317,40 @@ async def account(
 
 # ===== قسم الباقات =====
 
+# =========================
+# الباقات - نسخة تجريبية
+# =========================
+
+PACKAGE_DAYS = 5
+
 def packages_keyboard():
-    keyboard = [
-        ["10,000 د.ع", "20,000 د.ع"],
-        ["30,000 د.ع", "40,000 د.ع"],
-        ["50,000 د.ع", "60,000 د.ع"],
-        ["70,000 د.ع", "80,000 د.ع"],
-        ["90,000 د.ع", "100,000 د.ع"],
-        ["200,000 د.ع", "300,000 د.ع"],
-        ["400,000 د.ع", "500,000 د.ع"],
-        ["1,000,000 د.ع", "5,000,000 د.ع"],
-        ["10,000,000 د.ع", "15,000,000 د.ع"],
-        ["رجوع للقائمة الرئيسية"]
-    ]
+    amounts = list(range(10000, 1000001, 10000))
+    amounts += list(range(1500000, 15000001, 500000))
+
+    keyboard = []
+
+    for i in range(0, len(amounts), 2):
+        row = []
+
+        for amount in amounts[i:i + 2]:
+            row.append(f"{amount:,} نقطة")
+
+        keyboard.append(row)
+
+    keyboard.append(["العودة للقائمة الرئيسية"])
 
     return ReplyKeyboardMarkup(
         keyboard,
+        resize_keyboard=True
+    )
+
+
+def package_details_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            ["اشتراك"],
+            ["العودة للباقات"]
+        ],
         resize_keyboard=True
     )
 
@@ -338,13 +359,23 @@ async def packages(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+
+    active_package = user.get("active_package")
+
+    if active_package:
+        await update.message.reply_text(
+            "عندك باقة فعّالة حالياً.\n"
+            "لا يمكن الاشتراك بباقة ثانية إلى أن تنتهي الباقة الحالية."
+        )
+        return
+
     await update.message.reply_text(
-        "اختر الباقة المطلوبة:",
+        "اختاري قيمة الباقة من القائمة:",
         reply_markup=packages_keyboard()
     )
 
-
-# ===== تفاصيل الباقة =====
 
 async def package_details(
     update: Update,
@@ -352,73 +383,117 @@ async def package_details(
 ):
     text = update.message.text.strip()
 
-    if text == "رجوع للقائمة الرئيسية":
-        await start(update, context)
-        return
-
-    if not text.endswith("د.ع"):
+    if not text.endswith("نقطة"):
         return
 
     try:
         amount = int(
-            text.replace("د.ع", "")
-                 .replace(",", "")
-                 .strip()
+            text.replace("نقطة", "")
+                .replace(",", "")
+                .strip()
         )
     except ValueError:
         return
 
-    daily_profit = amount // 100
-    total_profit = daily_profit * 5
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+
+    if user.get("active_package"):
+        await update.message.reply_text(
+            "عندك باقة فعّالة حالياً.\n"
+            "انتظري انتهاء الباقة حتى تكدرين تشتركين بباقة جديدة."
+        )
+        return
+
+    daily_profit = (amount // 10000) * 100
+    total_profit = daily_profit * PACKAGE_DAYS
 
     context.user_data["selected_package"] = amount
 
-    keyboard = [
-        ["اشتراك"],
-        ["العودة للباقات"]
-    ]
-
     await update.message.reply_text(
-        f"تفاصيل الباقة.\n\n"
-        f"المبلغ: {amount:,} د.ع\n"
-        f"المدة: 5 أيام\n"
-        f"العائد اليومي المعروض: {daily_profit:,} د.ع\n"
-        f"إجمالي العائد المعروض: {total_profit:,} د.ع\n\n"
-        f"اضغط اشتراك للمتابعة.",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard,
-            resize_keyboard=True
-        )
+        f"""
+━━━━━━━━━━━━━━━
+تفاصيل الباقة
+━━━━━━━━━━━━━━━
+
+المبلغ: {amount:,} نقطة
+المدة: {PACKAGE_DAYS} أيام
+العائد اليومي التجريبي: {daily_profit:,} نقطة
+إجمالي العائد التجريبي: {total_profit:,} نقطة
+
+اضغطي اشتراك للتأكيد.
+━━━━━━━━━━━━━━━
+""",
+        reply_markup=package_details_keyboard()
     )
 
-
-# ===== تأكيد الاشتراك =====
 
 async def package_confirm(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-    text = update.message.text.strip()
+    user_id = update.effective_user.id
+    user = get_user(user_id)
 
-    if text == "العودة للباقات":
-        await packages(update, context)
+    amount = context.user_data.get("selected_package")
+
+    if not amount:
+        await update.message.reply_text(
+            "اختاري الباقة أولاً."
+        )
         return
 
-    if text == "اشتراك":
-        amount = context.user_data.get("selected_package")
-
-        if not amount:
-            await update.message.reply_text(
-                "اختاري الباقة أولاً."
-            )
-            return
-
+    if user.get("active_package"):
         await update.message.reply_text(
-            f"تم اختيار باقة بقيمة {amount:,} د.ع.\n\n"
-            f"هذه خطوة تأكيد فقط."
+            "عندك باقة فعّالة حالياً."
         )
+        return
 
-        context.user_data.pop("selected_package", None)
+    balance = user.get("balance", 0)
+
+    if balance < amount:
+        await update.message.reply_text(
+            f"رصيدك غير كافي.\n"
+            f"قيمة الباقة: {amount:,} نقطة\n"
+            f"رصيدك الحالي: {balance:,} نقطة"
+        )
+        return
+
+    # خصم النقاط التجريبية
+    user["balance"] -= amount
+
+    daily_profit = (amount // 10000) * 100
+    total_profit = daily_profit * PACKAGE_DAYS
+
+    # تفعيل الباقة
+    user["active_package"] = {
+        "amount": amount,
+        "daily_profit": daily_profit,
+        "total_profit": total_profit,
+        "days": PACKAGE_DAYS,
+        "started_at": datetime.now(),
+        "end_at": datetime.now() + timedelta(days=PACKAGE_DAYS)
+    }
+
+    # عدد الاشتراكات السابقة + الحالي
+    user["packages_count"] = user.get("packages_count", 0) + 1
+
+    # نحفظ آخر اختيار مؤقتاً
+    context.user_data.pop("selected_package", None)
+
+    await update.message.reply_text(
+        f"""
+تم تفعيل الباقة بنجاح.
+
+قيمة الباقة: {amount:,} نقطة
+المدة: {PACKAGE_DAYS} أيام
+العائد اليومي التجريبي: {daily_profit:,} نقطة
+إجمالي العائد التجريبي: {total_profit:,} نقطة
+
+رصيدك الحالي: {user["balance"]:,} نقطة
+""",
+        reply_markup=user_keyboard(user_id)
+    )
 
 # ===== حالة الباقة =====
 
