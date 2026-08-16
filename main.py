@@ -95,7 +95,13 @@ def get_user(user_id):
             "username": "",
             "referrer_id": None,
             "referrals": 0,
-            "referral_profit": 0
+            "referral_profit": 0,
+
+            "balance": 0,
+            "packages_count": 0,
+            "total_capital": 0,
+            "total_profit": 0,
+            "total_days": 0
         }
 
     return users[user_id]
@@ -245,28 +251,44 @@ async def account(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+    user_id = update.effective_user.id
+    user = get_user(user_id)
 
-    user = get_user(
-        update.effective_user.id
-    )
+    balance = user.get("balance", 0)
+    packages_count = user.get("packages_count", 0)
+    total_capital = user.get("total_capital", 0)
+    total_profit = user.get("total_profit", 0)
+
+    referrals = user.get("referrals", 0)
+    referral_profit = user.get("referral_profit", 0)
+
+    total_days = user.get("total_days", 0)
+
+    total = total_capital + total_profit
 
     await update.message.reply_text(
-        f"""
-━━━━━━━━━━━━━━━━━━
-حسابي
-━━━━━━━━━━━━━━━━━━
+        f"""━━━━━━━━━━━━━━━
+              حسابي
+━━━━━━━━━━━━━━━
 
-الاسم: {user["name"]}
-اليوزر: @{user["username"] or "بدون يوزر"}
+• الرصيد: {balance:,} د.ع
+• عدد الباقات: {packages_count}
+• إجمالي رأس المال: {total_capital:,} د.ع
+• إجمالي الأرباح: {total_profit:,} د.ع
+• الإجمالي الكلي: {total:,} د.ع
 
-عدد الإحالات:
-{user["referrals"]}
+━━━━━━━━━━━━━━━
+              الإحالات
+━━━━━━━━━━━━━━━
 
-أرباح الإحالة:
-{user["referral_profit"]:,} د.ع.
+• عدد الإحالات: {referrals}
+• أرباح الإحالة: {referral_profit:,} د.ع
 
-━━━━━━━━━━━━━━━━━━
-"""
+━━━━━━━━━━━━━━━
+
+• عدد الأيام: {total_days}
+
+━━━━━━━━━━━━━━━"""
     )
 
 
