@@ -317,15 +317,22 @@ async def account(
 
 
 # =========================
-# إعدادات الباقات
+# قسم الباقات
 # =========================
 
 PACKAGE_DAYS = 5
+PROFIT_PER_10000 = 100
+
+
+def get_package_amounts():
+    amounts = list(range(10_000, 100_001, 10_000))
+    amounts += list(range(150_000, 1_000_001, 50_000))
+    amounts += list(range(1_500_000, 15_000_001, 500_000))
+    return amounts
+
 
 def packages_keyboard():
-    amounts = list(range(10_000, 1_000_001, 10_000))
-    amounts += list(range(1_500_000, 15_000_001, 500_000))
-
+    amounts = get_package_amounts()
     keyboard = []
 
     for i in range(0, len(amounts), 2):
@@ -360,14 +367,15 @@ async def packages(update, context):
 
     if user.get("active_package"):
         await update.message.reply_text(
-            "لديك باقة فعّالة حالياً، ولا يمكنك الاشتراك بباقة أخرى حتى تنتهي."
+            "لديك باقة فعّالة حالياً، "
+            "ولا يمكنك الاشتراك بباقة أخرى حتى تنتهي."
         )
         return
 
     context.user_data.pop("selected_package", None)
 
     await update.message.reply_text(
-        "اختر قيمة الباقة من القائمة:",
+        "اختر قيمة الباقة:",
         reply_markup=packages_keyboard()
     )
 
@@ -387,29 +395,37 @@ async def package_details(update, context):
     except ValueError:
         return
 
+    if amount not in get_package_amounts():
+        return
+
     user_id = update.effective_user.id
     user = get_user(user_id)
 
     if user.get("active_package"):
         await update.message.reply_text(
-            "لديك باقة فعّالة حالياً، ولا يمكنك الاشتراك بباقة أخرى حتى تنتهي."
+            "لديك باقة فعّالة حالياً، "
+            "ولا يمكنك الاشتراك بباقة أخرى حتى تنتهي."
         )
         return
+
+    daily_profit = (amount // 10_000) * PROFIT_PER_10000
+    total_profit = daily_profit * PACKAGE_DAYS
 
     context.user_data["selected_package"] = amount
 
     await update.message.reply_text(
-        f"""
-━━━━━━━━━━━━━━━
+        f"""━━━━━━━━━━━━━━━
         تفاصيل الباقة
 ━━━━━━━━━━━━━━━
 
-قيمة الباقة: {amount:,} د.ع
-المدة: {PACKAGE_DAYS} أيام
+• المبلغ: {amount:,} د.ع
+• الربح اليومي: {daily_profit:,} د.ع
+• المدة: {PACKAGE_DAYS} أيام
+• يبدأ الربح من اليوم الثاني
+• إجمالي الربح: {total_profit:,} د.ع
 
 اضغط «اشتراك» للمتابعة.
-━━━━━━━━━━━━━━━
-""",
+━━━━━━━━━━━━━━━""",
         reply_markup=package_confirm_keyboard()
     )
 
@@ -436,40 +452,54 @@ async def package_confirm(update, context):
 
     if balance < amount:
         await update.message.reply_text(
-            f"""
-رصيدك غير كافٍ.
+            f"""رصيدك غير كافٍ.
 
-قيمة الباقة: {amount:,} د.ع
-رصيدك الحالي: {balance:,} د.ع
-"""
+• قيمة الباقة: {amount:,} د.ع
+• رصيدك الحالي: {balance:,} د.ع"""
         )
         return
 
-    # خصم الرصيد الداخلي
+    daily_profit = (amount // 10_000) * PROFIT_PER_10000
+    total_profit = daily_profit * PACKAGE_DAYS
+    now = datetime.now()
+
+    # خصم الرصيد الداخلي للمحاكاة
     user["balance"] -= amount
 
-    # تفعيل الباقة
+    # تحديث عدد الباقات
+    user["packages_count"] = (
+        user.get("packages_count", 0) + 1
+    )
+
+    # تسجيل الباقة الحالية
     user["active_package"] = {
         "amount": amount,
-        "started_at": datetime.now(),
-        "days": PACKAGE_DAYS
+        "daily_profit": daily_profit,
+        "total_profit": total_profit,
+        "days": PACKAGE_DAYS,
+        "started_at": now,
+        "profit_started_at": now + timedelta(days=1),
+        "ends_at": now + timedelta(days=6),
+        "profit_paid": 0,
+        "status": "active"
     }
-
-    # زيادة عدد الاشتراكات السابقة
-    user["packages_count"] = user.get("packages_count", 0) + 1
 
     context.user_data.pop("selected_package", None)
 
     await update.message.reply_text(
-        f"""
-تم تفعيل الباقة بنجاح.
+        f"""تم تفعيل الباقة بنجاح.
 
-قيمة الباقة: {amount:,} د.ع
-المدة: {PACKAGE_DAYS} أيام
-رصيدك الحالي: {user["balance"]:,} د.ع
-""",
+• المبلغ: {amount:,} د.ع
+• الربح اليومي: {daily_profit:,} د.ع
+• المدة: {PACKAGE_DAYS} أيام
+• يبدأ الربح من اليوم الثاني
+
+رصيدك الحالي:
+{user["balance"]:,} د.ع""",
         reply_markup=user_keyboard(user_id)
     )
+
+
 
 
 # ===== حالة الباقة =====
@@ -1028,22 +1058,25 @@ async def message_router(
     user_id = update.effective_user.id
     text = update.message.text
 
-    #------- للباقات---------
-    if text == "الباقات":
-        await packages(update, context)
-        return
+    # =========================
+# ربط قسم الباقات
+# =========================
 
-    if text.endswith("د.ع"):
-        await package_details(update, context)
-        return
+if text == "الباقات":
+    await packages(update, context)
+    return
 
-    if text == "اشتراك":
-        await package_confirm(update, context)
-        return
+if text.endswith("د.ع"):
+    await package_details(update, context)
+    return
 
-    if text == "العودة للباقات":
-        await packages(update, context)
-        return
+if text == "اشتراك":
+    await package_confirm(update, context)
+    return
+
+if text == "العودة للباقات":
+    await packages(update, context)
+    return
 
 
     state = get_state(user_id)
