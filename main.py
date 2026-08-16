@@ -204,7 +204,41 @@ async def start(
 ):
 
     user_id = update.effective_user.id
+    
 
+    referrer_id = None
+
+if context.args:
+    argument = context.args[0]
+
+    if argument.startswith("ref_"):
+        try:
+            referrer_id = int(
+                argument.replace("ref_", "", 1)
+            )
+        except ValueError:
+            referrer_id = None
+
+if referrer_id:
+    joined_referrer = process_referral(
+        user_id,
+        referrer_id
+    )
+
+    if joined_referrer:
+        try:
+            await context.bot.send_message(
+                chat_id=joined_referrer,
+                text=(
+                    "تم انضمام صديقك عن طريق الدعوة "
+                    "التي شاركتها، وتم تحصيل "
+                    "5 د.ع."
+                )
+            )
+        except Exception:
+            pass
+
+    
     user = get_user(user_id)
 
     user["name"] = update.effective_user.full_name or ""
@@ -566,6 +600,12 @@ async def package_confirm(update, context):
         "status": "active"
     }
 
+         await give_first_package_referral(
+        user_id,
+        amount,
+        context
+    )
+    
     context.user_data.pop("selected_package", None)
 
     await update.message.reply_text(
