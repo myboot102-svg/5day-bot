@@ -492,7 +492,7 @@ async def package_confirm(update, context):
 
     await update.message.reply_text(
         f"""تم تفعيل الباقة بنجاح.
-    )
+        )
 
 
 
