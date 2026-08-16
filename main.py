@@ -602,15 +602,18 @@ async def package_confirm(update, context):
     
     context.user_data.pop("selected_package", None)
 
+
+
+    await give_first_package_referral(
+         user_id,
+         amount,
+         context
+    )
+
+    
     await update.message.reply_text(
     f"""تم تفعيل الباقة بنجاح."""
     )
-
-await give_first_package_referral(
-     user_id,
-     amount,
-     context
-)
 
 
 
