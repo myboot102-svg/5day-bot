@@ -1062,21 +1062,21 @@ async def message_router(
 # ربط قسم الباقات
 # =========================
 
-if text == "الباقات":
-    await packages(update, context)
-    return
+    if text == "الباقات":
+        await packages(update, context)
+        return
 
-if text.endswith("د.ع"):
-    await package_details(update, context)
-    return
+    if text.endswith("د.ع"):
+        await package_details(update, context)
+        return
 
-if text == "اشتراك":
-    await package_confirm(update, context)
-    return
+    if text == "اشتراك":
+        await package_confirm(update, context)
+        return
 
-if text == "العودة للباقات":
-    await packages(update, context)
-    return
+    if text == "العودة للباقات":
+        await packages(update, context)
+        return
 
 
     state = get_state(user_id)
