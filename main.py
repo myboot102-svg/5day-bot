@@ -1715,9 +1715,16 @@ async def message_router(
         )
 
 
-# ===== تشغيل البوت =====
+# =========================
+# تشغيل البوت
+# =========================
 
 app = Application.builder().token(TOKEN).build()
+
+
+# =========================
+# أمر /start
+# =========================
 
 app.add_handler(
     CommandHandler(
@@ -1726,14 +1733,64 @@ app.add_handler(
     )
 )
 
-# ===== هاندل أزرار الباقات =====
+
+# =========================
+# أزرار المستخدمين - الأدمن
+# =========================
 
 app.add_handler(
-    MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        message_router
+    CallbackQueryHandler(
+        admin_user_view,
+        pattern=r"^user_view:"
     )
 )
+
+app.add_handler(
+    CallbackQueryHandler(
+        admin_add_points,
+        pattern=r"^add_points:"
+    )
+)
+
+app.add_handler(
+    CallbackQueryHandler(
+        admin_sub_points,
+        pattern=r"^sub_points:"
+    )
+)
+
+app.add_handler(
+    CallbackQueryHandler(
+        admin_user_package,
+        pattern=r"^user_package:"
+    )
+)
+
+app.add_handler(
+    CallbackQueryHandler(
+        admin_user_block,
+        pattern=r"^user_block:"
+    )
+)
+
+app.add_handler(
+    CallbackQueryHandler(
+        admin_user_unblock,
+        pattern=r"^user_unblock:"
+    )
+)
+
+app.add_handler(
+    CallbackQueryHandler(
+        admin_users_back,
+        pattern=r"^admin_users_back$"
+    )
+)
+
+
+# =========================
+# باقي أزرار البوت
+# =========================
 
 app.add_handler(
     CallbackQueryHandler(
@@ -1741,11 +1798,21 @@ app.add_handler(
     )
 )
 
+
+# =========================
+# الرسائل النصية
+# =========================
+
 app.add_handler(
     MessageHandler(
         filters.TEXT & ~filters.COMMAND,
         message_router
     )
 )
+
+
+# =========================
+# تشغيل البوت
+# =========================
 
 app.run_polling()
