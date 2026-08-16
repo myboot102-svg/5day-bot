@@ -492,15 +492,6 @@ async def package_confirm(update, context):
 
     await update.message.reply_text(
         f"""تم تفعيل الباقة بنجاح.
-
-• المبلغ: {amount:,} د.ع
-• الربح اليومي: {daily_profit:,} د.ع
-• المدة: {PACKAGE_DAYS} أيام
-• يبدأ الربح من اليوم الثاني
-
-رصيدك الحالي:
-{user["balance"]:,} د.ع""",
-        reply_markup=user_keyboard(user_id)
     )
 
 
