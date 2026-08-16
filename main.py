@@ -491,8 +491,8 @@ async def package_confirm(update, context):
     context.user_data.pop("selected_package", None)
 
     await update.message.reply_text(
-        f"""تم تفعيل الباقة بنجاح.
-        )
+    f"""تم تفعيل الباقة بنجاح."""
+    )
 
 
 
@@ -503,9 +503,93 @@ async def package_status(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+
+    package = user.get("active_package")
+
+    if not package:
+        await update.message.reply_text(
+            "لا توجد لديك باقة مفعّلة حالياً."
+        )
+        return
+
+    amount = int(package.get("amount", 0))
+    daily_profit = int(package.get("daily_profit", 0))
+    total_profit = int(package.get("total_profit", 0))
+    profit_paid = int(package.get("profit_paid", 0))
+    days = int(package.get("days", 5))
+
+    started_at = package.get("started_at")
+    profit_started_at = package.get("profit_started_at")
+    ends_at = package.get("ends_at")
+
+    if isinstance(started_at, str):
+        started_at = datetime.fromisoformat(started_at)
+
+    if isinstance(profit_started_at, str):
+        profit_started_at = datetime.fromisoformat(profit_started_at)
+
+    if isinstance(ends_at, str):
+        ends_at = datetime.fromisoformat(ends_at)
+
+    now = datetime.now()
+
+    # إذا انتهت الباقة
+    if now >= ends_at:
+        status = "منتهية"
+        current_day = days + 2
+        remaining_text = "انتهت الباقة"
+    else:
+        status = "فعّالة"
+
+        elapsed_seconds = (
+            now - started_at
+        ).total_seconds()
+
+        # اليوم الأول بدون ربح
+        current_day = int(
+            elapsed_seconds // 86400
+        ) + 1
+
+        # لا يتجاوز اليوم السادس
+        current_day = min(current_day, days + 1)
+
+        remaining_seconds = (
+            ends_at - now
+        ).total_seconds()
+
+        remaining_days = int(
+            remaining_seconds // 86400
+        )
+
+        remaining_hours = int(
+            (remaining_seconds % 86400) // 3600
+        )
+
+        remaining_minutes = int(
+            (remaining_seconds % 3600) // 60
+        )
+
+        remaining_text = (
+            f"{remaining_days} يوم "
+            f"{remaining_hours} ساعة "
+            f"{remaining_minutes} دقيقة"
+        )
 
     await update.message.reply_text(
-        "حالة الباقة سيتم عرضها هنا."
+        f"━━━━━━━━━━━━━━━\n"
+        f"          حالة الباقة\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"• الحالة: {status}\n"
+        f"• قيمة الباقة: {amount:,} د.ع\n"
+        f"• الربح اليومي: {daily_profit:,} د.ع\n"
+        f"• إجمالي الأرباح: {total_profit:,} د.ع\n"
+        f"• الأرباح المستلمة: {profit_paid:,} د.ع\n"
+        f"• مدة الأرباح: {days} أيام\n"
+        f"• اليوم الحالي: {current_day}\n"
+        f"• المتبقي على الانتهاء: {remaining_text}\n"
+        f"━━━━━━━━━━━━━━━"
     )
 
 
