@@ -94,11 +94,11 @@ def get_user(user_id):
         users[user_id] = {
             "name": "",
             "username": "",
-            "join_date": None,
+            "join_date": datetime.now(),
 
             "balance": 0,
-            
-           "packages_count": 0,
+
+            "packages_count": 0,
             "total_capital": 0,
             "total_profit": 0,
 
