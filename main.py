@@ -210,49 +210,124 @@ async def start(
 
     clear_state(user_id)
 
-    # ===== الإحالة =====
+    # =========================
+# نظام الإحالة
+# =========================
 
-    if context.args:
+REFERRAL_JOIN_REWARD = 5
+REFERRAL_RATE = 0.05
 
-        argument = context.args[0]
 
-        if argument.startswith("ref_"):
+def process_referral(user_id, referrer_id):
+    """
+    معالجة دخول مستخدم جديد عن طريق رابط إحالة.
+    يحصل المحيل على 5 د.ع مرة واحدة فقط.
+    """
 
-            try:
+    user = get_user(user_id)
 
-                referrer_id = int(
-                    argument.replace(
-                        "ref_",
-                        "",
-                        1
-                    )
-                )
+    # المستخدم عنده محيل سابق، لا نغيره.
+    if user.get("referrer_id") is not None:
+        return None
 
-                if (
-                    referrer_id != user_id
-                    and user["referrer_id"] is None
-                ):
+    # منع الإحالة الذاتية.
+    if user_id == referrer_id:
+        return None
 
-                    user["referrer_id"] = referrer_id
+    # التأكد أن المحيل موجود.
+    if referrer_id not in users:
+        return None
 
-                    referrer = get_user(
-                        referrer_id
-                    )
+    referrer = get_user(referrer_id)
 
-                    referrer["referrals"] += 1
+    # حفظ المحيل.
+    user["referrer_id"] = referrer_id
 
-                    await context.bot.send_message(
-                        chat_id=referrer_id,
-                        text="انضم صديق جديد عن طريق رابط الإحالة الخاص بك."
-                    )
+    # التأكد من وجود الحقول.
+    user.setdefault("referral_join_reward_received", False)
+    user.setdefault("referral_commission_paid", False)
 
-            except:
-                pass
+    referrer.setdefault("referrals", 0)
+    referrer.setdefault("referral_profit", 0)
+    referrer.setdefault("balance", 0)
 
-    await update.message.reply_text(
-        WELCOME_MESSAGE,
-        reply_markup=user_keyboard(user_id)
+    # تسجيل الإحالة.
+    referrer["referrals"] += 1
+
+    # مكافأة الدخول 5 د.ع مرة واحدة.
+    if not user.get("referral_join_reward_received", False):
+
+        referrer["balance"] += REFERRAL_JOIN_REWARD
+        referrer["referral_profit"] += REFERRAL_JOIN_REWARD
+
+        user["referral_join_reward_received"] = True
+
+        return referrer_id
+
+    return None
+
+
+# =========================
+# عمولة أول باقة
+# =========================
+
+async def give_first_package_referral(
+    user_id,
+    package_amount,
+    context
+):
+    """
+    يعطي المحيل 5% من أول باقة مفعلة فقط.
+    التجديدات لا تعطي عمولة.
+    """
+
+    user = get_user(user_id)
+
+    referrer_id = user.get("referrer_id")
+
+    if not referrer_id:
+        return
+
+    # إذا أخذ المحيل عمولة سابقاً، لا نكررها.
+    if user.get("referral_commission_paid", False):
+        return
+
+    if referrer_id not in users:
+        return
+
+    referrer = get_user(referrer_id)
+
+    commission = int(
+        package_amount * REFERRAL_RATE
     )
+
+    if commission <= 0:
+        return
+
+    referrer.setdefault("balance", 0)
+    referrer.setdefault("referral_profit", 0)
+
+    # إضافة العمولة لرصيد المحيل.
+    referrer["balance"] += commission
+    referrer["referral_profit"] += commission
+
+    # تثبيت أن أول عمولة تم دفعها.
+    user["referral_commission_paid"] = True
+
+    # إرسال إشعار للمحيل.
+    try:
+        await context.bot.send_message(
+            chat_id=referrer_id,
+            text=(
+                "تم تحصيل مبلغ "
+                f"{commission:,} د.ع "
+                "من تفعيل باقة صديقك."
+            )
+        )
+    except Exception:
+        pass
+
+    
 
 
 # ===== حسابي =====
